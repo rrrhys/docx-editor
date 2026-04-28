@@ -34,6 +34,7 @@ import type {
   Theme,
   RelationshipMap,
   MediaFile,
+  VmlWatermarkContent,
 } from '../types/document';
 import type { StyleMap } from './styleParser';
 import type { NumberingMap } from './numberingParser';
@@ -220,6 +221,36 @@ function parseHeaderFooterContent(
 }
 
 /**
+ * Walk paragraphs → runs → run content and pull out all VmlWatermarkContent nodes.
+ * Mutates run content arrays in place to remove them, then returns the collected watermarks.
+ */
+function extractWatermarks(content: (Paragraph | Table)[]): {
+  content: (Paragraph | Table)[];
+  watermarks: VmlWatermarkContent[];
+} {
+  const watermarks: VmlWatermarkContent[] = [];
+
+  for (const block of content) {
+    if (block.type !== 'paragraph') continue;
+    for (const item of block.content) {
+      if (item.type !== 'run') continue;
+      const toRemove: number[] = [];
+      for (let i = 0; i < item.content.length; i++) {
+        if (item.content[i].type === 'vmlWatermark') {
+          watermarks.push(item.content[i] as VmlWatermarkContent);
+          toRemove.push(i);
+        }
+      }
+      for (let i = toRemove.length - 1; i >= 0; i--) {
+        item.content.splice(toRemove[i]!, 1);
+      }
+    }
+  }
+
+  return { content, watermarks };
+}
+
+/**
  * Parse a header XML file (word/header*.xml)
  *
  * @param headerXml - The raw XML content of the header file
@@ -264,8 +295,11 @@ export function parseHeader(
     return result;
   }
 
-  // Parse content
-  result.content = parseHeaderFooterContent(rootElement, styles, theme, numbering, rels, media);
+  // Parse content and extract watermarks
+  const rawContent = parseHeaderFooterContent(rootElement, styles, theme, numbering, rels, media);
+  const { content, watermarks } = extractWatermarks(rawContent);
+  result.content = content;
+  if (watermarks.length > 0) result.watermarks = watermarks;
 
   return result;
 }
@@ -315,8 +349,11 @@ export function parseFooter(
     return result;
   }
 
-  // Parse content
-  result.content = parseHeaderFooterContent(rootElement, styles, theme, numbering, rels, media);
+  // Parse content and extract watermarks
+  const rawContent = parseHeaderFooterContent(rootElement, styles, theme, numbering, rels, media);
+  const { content, watermarks } = extractWatermarks(rawContent);
+  result.content = content;
+  if (watermarks.length > 0) result.watermarks = watermarks;
 
   return result;
 }

@@ -31,7 +31,7 @@ import { renderTableFragment } from './renderTable';
 import { renderImageFragment } from './renderImage';
 import { renderTextBoxFragment } from './renderTextBox';
 import type { BlockLookup } from './index';
-import type { BorderSpec } from '../types/document';
+import type { BorderSpec, VmlWatermarkContent } from '../types/document';
 import { borderToStyle } from '../utils/formatToStyle';
 import type { Theme } from '../types/document';
 import { measureParagraph, type FloatingImageZone } from '../layout-bridge/measuring';
@@ -189,6 +189,8 @@ export interface RenderPageOptions {
   footnoteArea?: FootnoteRenderItem[];
   /** Comment IDs that are resolved — skip highlight for these */
   resolvedCommentIds?: Set<number>;
+  /** Watermarks to render as background images on each page */
+  watermarks?: VmlWatermarkContent[];
 }
 
 interface HeaderFooterLayoutInfo {
@@ -1100,6 +1102,30 @@ export function renderPage(
     fnAreaEl.style.left = '0';
     fnAreaEl.style.right = '0';
     contentEl.appendChild(fnAreaEl);
+  }
+
+  // Render watermark layer first so it sits behind content in DOM order
+  if (options.watermarks && options.watermarks.length > 0) {
+    const ptToPx = (pt: number) => (pt * 96) / 72;
+    for (const wm of options.watermarks) {
+      const img = doc.createElement('img');
+      img.src = wm.imageDataUrl;
+      img.alt = '';
+      img.setAttribute('aria-hidden', 'true');
+      img.style.position = 'absolute';
+      img.style.pointerEvents = 'none';
+      img.style.zIndex = '0';
+      img.style.top = '0';
+      img.style.left = '0';
+      img.style.width = `${ptToPx(wm.widthPt)}px`;
+      img.style.height = `${ptToPx(wm.heightPt)}px`;
+
+      if (wm.rotation) {
+        img.style.transform = `rotate(${wm.rotation}deg)`;
+      }
+
+      pageEl.appendChild(img);
+    }
   }
 
   pageEl.appendChild(contentEl);

@@ -127,6 +127,31 @@ export interface ShapeContent {
 }
 
 /**
+ * VML image watermark (w:pict > v:shape > v:imagedata)
+ */
+export interface VmlWatermarkContent {
+  type: 'vmlWatermark';
+  /** Resolved image data URL (base64) */
+  imageDataUrl: string;
+  /** Width in points */
+  widthPt: number;
+  /** Height in points */
+  heightPt: number;
+  /** Horizontal positioning */
+  horizontalPosition: 'center' | 'left' | 'right' | 'absolute';
+  /** Vertical positioning */
+  verticalPosition: 'center' | 'top' | 'bottom' | 'absolute';
+  /** Horizontal offset in points (used when position is absolute) */
+  marginLeft?: number;
+  /** Vertical offset in points (used when position is absolute) */
+  marginTop?: number;
+  /** Rotation in degrees */
+  rotation?: number;
+  /** z-index */
+  zIndex?: number;
+}
+
+/**
  * All possible run content types
  */
 export type RunContent =
@@ -140,7 +165,8 @@ export type RunContent =
   | SoftHyphenContent
   | NoBreakHyphenContent
   | DrawingContent
-  | ShapeContent;
+  | ShapeContent
+  | VmlWatermarkContent;
 
 // ============================================================================
 // RUN (w:r)
@@ -1194,6 +1220,8 @@ export interface HeaderFooter {
   hdrFtrType: HeaderFooterType;
   /** Content (paragraphs, tables, etc.) */
   content: (Paragraph | Table)[];
+  /** Watermarks lifted out of VML pict elements */
+  watermarks?: VmlWatermarkContent[];
 }
 
 // ============================================================================

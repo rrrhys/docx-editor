@@ -31,6 +31,7 @@ import type {
   SoftHyphenContent,
   NoBreakHyphenContent,
   DrawingContent,
+  VmlWatermarkContent,
   RunPropertyChange,
   TextFormatting,
   ColorValue,
@@ -568,6 +569,131 @@ function getLocalName(name: string | undefined): string {
 }
 
 /**
+ * Parse VML style string into a key/value map
+ */
+function parseVmlStyle(style: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const part of style.split(';')) {
+    const colonIdx = part.indexOf(':');
+    if (colonIdx < 0) continue;
+    const k = part.substring(0, colonIdx).trim();
+    const v = part.substring(colonIdx + 1).trim();
+    if (k && v) result[k] = v;
+  }
+  return result;
+}
+
+/**
+ * Parse a pt value string like "622.232pt" to a float, returning undefined if unparseable
+ */
+function parsePtValue(val: string | undefined): number | undefined {
+  if (!val) return undefined;
+  const n = parseFloat(val.replace('pt', ''));
+  return isNaN(n) ? undefined : n;
+}
+
+/**
+ * Parse a VML w:pict element and return a VmlWatermarkContent if it contains an image watermark
+ */
+function parseVmlWatermark(
+  pictElement: XmlElement,
+  rels: RelationshipMap | null,
+  media: Map<string, MediaFile> | null
+): VmlWatermarkContent | null {
+  if (!rels || !media) return null;
+
+  const children = getChildElements(pictElement);
+
+  // Find v:shape (local name "shape")
+  const shapeEl = children.find((el) => getLocalName(el.name) === 'shape');
+  if (!shapeEl) return null;
+
+  // Find v:imagedata inside shape
+  const shapeChildren = getChildElements(shapeEl);
+  const imageDataEl = shapeChildren.find((el) => getLocalName(el.name) === 'imagedata');
+  if (!imageDataEl) return null;
+
+  // Get the relationship id from r:id attribute
+  const rId = getAttribute(imageDataEl, 'r', 'id') ?? getAttribute(imageDataEl, 'r', 'embed');
+  if (!rId) return null;
+
+  // Resolve rId to a media filename via rels
+  const rel = rels.get(rId);
+  if (!rel?.target) return null;
+
+  const targetPath = rel.target;
+  const normalizedPath = targetPath.startsWith('../') ? targetPath.substring(3) : targetPath;
+  const withWordPrefix = normalizedPath.startsWith('word/')
+    ? normalizedPath
+    : `word/${normalizedPath}`;
+
+  // Case-insensitive media lookup
+  const findMedia = (path: string) => {
+    const lower = path.toLowerCase();
+    for (const [key, val] of media.entries()) {
+      if (key.toLowerCase() === lower) return val;
+    }
+    return undefined;
+  };
+
+  const mediaFile =
+    findMedia(normalizedPath) ?? findMedia(withWordPrefix) ?? findMedia(targetPath);
+  if (!mediaFile) return null;
+
+  const imageSrc = mediaFile.dataUrl || mediaFile.base64;
+  if (!imageSrc) return null;
+
+  // Parse the style attribute
+  const styleAttr = getAttribute(shapeEl, null, 'style') ?? '';
+  const style = parseVmlStyle(styleAttr);
+
+  const widthPt = parsePtValue(style['width']);
+  const heightPt = parsePtValue(style['height']);
+  if (!widthPt || !heightPt) return null;
+
+  // Horizontal position
+  const msoHoriz = style['mso-position-horizontal'];
+  let horizontalPosition: VmlWatermarkContent['horizontalPosition'] = 'center';
+  if (msoHoriz === 'left') horizontalPosition = 'left';
+  else if (msoHoriz === 'right') horizontalPosition = 'right';
+  else if (msoHoriz === 'absolute') horizontalPosition = 'absolute';
+  else if (msoHoriz === 'center') horizontalPosition = 'center';
+
+  // Vertical position
+  const msoVert = style['mso-position-vertical'];
+  let verticalPosition: VmlWatermarkContent['verticalPosition'] = 'center';
+  if (msoVert === 'top') verticalPosition = 'top';
+  else if (msoVert === 'bottom') verticalPosition = 'bottom';
+  else if (msoVert === 'absolute') verticalPosition = 'absolute';
+  else if (msoVert === 'center') verticalPosition = 'center';
+
+  const marginLeft = parsePtValue(style['margin-left']);
+  const marginTop = parsePtValue(style['margin-top']);
+
+  const rotationStr = style['rotation'];
+  const rotation = rotationStr ? parseFloat(rotationStr) : undefined;
+
+  const zIndexStr = style['z-index'];
+  const zIndex = zIndexStr ? parseInt(zIndexStr, 10) : undefined;
+
+  const result: VmlWatermarkContent = {
+    type: 'vmlWatermark',
+    imageDataUrl: imageSrc,
+    widthPt,
+    heightPt,
+    horizontalPosition,
+    verticalPosition,
+  };
+
+  if (marginLeft !== undefined) result.marginLeft = marginLeft;
+  if (marginTop !== undefined) result.marginTop = marginTop;
+  if (rotation !== undefined && !isNaN(rotation)) result.rotation = rotation;
+  if (zIndex !== undefined && !isNaN(zIndex)) result.zIndex = zIndex;
+
+  return result;
+}
+
+/**
  * Parse all content within a run element
  */
 function parseRunContents(
@@ -641,10 +767,13 @@ function parseRunContents(
         break;
 
       case 'pict':
-      case 'object':
-        // Legacy VML pictures/objects - will handle in shape parser
-        // For now, skip these
+      case 'object': {
+        const watermark = parseVmlWatermark(child, rels, media);
+        if (watermark) {
+          contents.push(watermark);
+        }
         break;
+      }
 
       case 'rPr':
         // Run properties - already handled separately

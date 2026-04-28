@@ -63,6 +63,7 @@ export type {
   NoBreakHyphenContent,
   DrawingContent,
   ShapeContent,
+  VmlWatermarkContent,
   RunContent,
   Run,
   Hyperlink,

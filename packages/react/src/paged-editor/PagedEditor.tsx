@@ -2118,6 +2118,14 @@ const PagedEditorComponent = forwardRef<PagedEditorRef, PagedEditorProps>(
               ? buildFootnoteRenderItems(pageFootnoteMap, footnoteContentMap, document)
               : undefined;
 
+            // Collect watermarks from header content (present on all pages)
+            const pageWatermarks = [
+              ...(headerContent?.watermarks ?? []),
+              ...(firstPageHeaderContent?.watermarks ?? []),
+            ].filter(
+              (wm, idx, arr) => arr.findIndex((w) => w.imageDataUrl === wm.imageDataUrl) === idx
+            );
+
             // Render pages to container
             const renderPagesKind = renderPages(newLayout.pages, pagesContainerRef.current, {
               pageGap,
@@ -2139,6 +2147,7 @@ const PagedEditorComponent = forwardRef<PagedEditorRef, PagedEditorProps>(
               theme: _theme,
               footnotesByPage: footnotesByPage?.size ? footnotesByPage : undefined,
               resolvedCommentIds,
+              watermarks: pageWatermarks.length > 0 ? pageWatermarks : undefined,
             } as RenderPageOptions & {
               pageGap?: number;
               blockLookup?: BlockLookup;
