@@ -137,13 +137,17 @@ export interface VmlWatermarkContent {
   widthPt: number;
   /** Height in points */
   heightPt: number;
-  /** Horizontal positioning */
+  /** Horizontal positioning mode */
   horizontalPosition: 'center' | 'left' | 'right' | 'absolute';
-  /** Vertical positioning */
+  /** What the horizontal position is relative to */
+  horizontalRelative?: 'page' | 'margin' | 'column';
+  /** Vertical positioning mode */
   verticalPosition: 'center' | 'top' | 'bottom' | 'absolute';
-  /** Horizontal offset in points (used when position is absolute) */
+  /** What the vertical position is relative to */
+  verticalRelative?: 'page' | 'margin' | 'line';
+  /** Horizontal offset in points from the anchor (used when position is absolute) */
   marginLeft?: number;
-  /** Vertical offset in points (used when position is absolute) */
+  /** Vertical offset in points from the anchor (used when position is absolute) */
   marginTop?: number;
   /** Rotation in degrees */
   rotation?: number;

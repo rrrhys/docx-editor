@@ -31,6 +31,7 @@ import type {
   SoftHyphenContent,
   NoBreakHyphenContent,
   DrawingContent,
+  ShapeContent,
   VmlWatermarkContent,
   RunPropertyChange,
   TextFormatting,
@@ -55,6 +56,7 @@ import {
 } from './xmlParser';
 import { resolveThemeFontRef } from './themeParser';
 import { parseImage } from './imageParser';
+import { parseShapeFromDrawing } from './shapeParser';
 
 /**
  * Parse color value from attributes
@@ -659,6 +661,11 @@ function parseVmlWatermark(
   else if (msoHoriz === 'absolute') horizontalPosition = 'absolute';
   else if (msoHoriz === 'center') horizontalPosition = 'center';
 
+  const msoHorizRel = style['mso-position-horizontal-relative'];
+  let horizontalRelative: VmlWatermarkContent['horizontalRelative'] = 'margin';
+  if (msoHorizRel === 'page') horizontalRelative = 'page';
+  else if (msoHorizRel === 'column') horizontalRelative = 'column';
+
   // Vertical position
   const msoVert = style['mso-position-vertical'];
   let verticalPosition: VmlWatermarkContent['verticalPosition'] = 'center';
@@ -666,6 +673,11 @@ function parseVmlWatermark(
   else if (msoVert === 'bottom') verticalPosition = 'bottom';
   else if (msoVert === 'absolute') verticalPosition = 'absolute';
   else if (msoVert === 'center') verticalPosition = 'center';
+
+  const msoVertRel = style['mso-position-vertical-relative'];
+  let verticalRelative: VmlWatermarkContent['verticalRelative'] = 'margin';
+  if (msoVertRel === 'page') verticalRelative = 'page';
+  else if (msoVertRel === 'line') verticalRelative = 'line';
 
   const marginLeft = parsePtValue(style['margin-left']);
   const marginTop = parsePtValue(style['margin-top']);
@@ -682,7 +694,9 @@ function parseVmlWatermark(
     widthPt,
     heightPt,
     horizontalPosition,
+    horizontalRelative,
     verticalPosition,
+    verticalRelative,
   };
 
   if (marginLeft !== undefined) result.marginLeft = marginLeft;
@@ -758,13 +772,18 @@ function parseRunContents(
         contents.push({ type: 'noBreakHyphen' } as NoBreakHyphenContent);
         break;
 
-      case 'drawing':
-        // Drawing/image
+      case 'drawing': {
         const drawing = parseDrawingContent(child, rels, media);
-        if (drawing) {
+        console.log('[docx-dbg] drawing case: src=', drawing?.image?.src?.slice(0, 40), 'relsSize=', rels?.size, 'mediaSize=', media?.size);
+        if (drawing?.image?.src) {
           contents.push(drawing);
+        } else {
+          // Not an image (or no src resolved) — try as a shape
+          const shape = parseShapeFromDrawing(child);
+          if (shape) contents.push({ type: 'shape', shape } as ShapeContent);
         }
         break;
+      }
 
       case 'pict':
       case 'object': {
@@ -789,17 +808,36 @@ function parseRunContents(
         break;
 
       case 'AlternateContent': {
-        // mc:AlternateContent — prefer mc:Choice over mc:Fallback
-        const choiceEl = getChildElements(child).find((el) => getLocalName(el.name) === 'Choice');
-        const targetEl =
-          choiceEl ?? getChildElements(child).find((el) => getLocalName(el.name) === 'Fallback');
-        if (targetEl) {
-          for (const innerChild of getChildElements(targetEl)) {
-            const innerName = getLocalName(innerChild.name);
-            if (innerName === 'drawing') {
-              const innerDrawing = parseDrawingContent(innerChild, rels, media);
-              // Only include drawings that have actual image data (skip shapes/connectors)
-              if (innerDrawing?.image?.src) contents.push(innerDrawing);
+        const altChildren = getChildElements(child);
+        const choiceEl = altChildren.find((el) => getLocalName(el.name) === 'Choice');
+        const fallbackEl = altChildren.find((el) => getLocalName(el.name) === 'Fallback');
+
+        let resolved = false;
+        // Try mc:Choice first
+        if (choiceEl) {
+          for (const innerChild of getChildElements(choiceEl)) {
+            if (getLocalName(innerChild.name) !== 'drawing') continue;
+            const innerDrawing = parseDrawingContent(innerChild, rels, media);
+            if (innerDrawing?.image?.src) {
+              contents.push(innerDrawing);
+              resolved = true;
+            } else {
+              // No image — try as a shape (e.g. wps:wsp connectors)
+              const shape = parseShapeFromDrawing(innerChild);
+              if (shape) {
+                contents.push({ type: 'shape', shape } as ShapeContent);
+                resolved = true;
+              }
+            }
+          }
+        }
+        // Fall back to mc:Fallback if Choice produced nothing renderable
+        if (!resolved && fallbackEl) {
+          for (const innerChild of getChildElements(fallbackEl)) {
+            if (getLocalName(innerChild.name) !== 'drawing') continue;
+            const fbDrawing = parseDrawingContent(innerChild, rels, media);
+            if (fbDrawing?.image?.src) {
+              contents.push(fbDrawing);
             }
           }
         }

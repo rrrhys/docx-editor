@@ -1115,8 +1115,31 @@ export function renderPage(
       img.style.position = 'absolute';
       img.style.pointerEvents = 'none';
       img.style.zIndex = '0';
-      img.style.top = '0';
-      img.style.left = '0';
+      // Anchor: 'page' = relative to page top-left (0,0); 'margin' = relative to content area
+      const anchorX = wm.horizontalRelative === 'page' ? 0 : page.margins.left;
+      const anchorY = wm.verticalRelative === 'page' ? 0 : page.margins.top;
+
+      let left: number;
+      let top: number;
+
+      if (wm.horizontalPosition === 'center') {
+        left = (page.size.w - ptToPx(wm.widthPt)) / 2;
+      } else if (wm.horizontalPosition === 'absolute' && wm.marginLeft !== undefined) {
+        left = anchorX + ptToPx(wm.marginLeft);
+      } else {
+        left = anchorX;
+      }
+
+      if (wm.verticalPosition === 'center') {
+        top = (page.size.h - ptToPx(wm.heightPt)) / 2;
+      } else if (wm.verticalPosition === 'absolute' && wm.marginTop !== undefined) {
+        top = anchorY + ptToPx(wm.marginTop);
+      } else {
+        top = anchorY;
+      }
+
+      img.style.left = `${left}px`;
+      img.style.top = `${top}px`;
       img.style.width = `${ptToPx(wm.widthPt)}px`;
       img.style.height = `${ptToPx(wm.heightPt)}px`;
 

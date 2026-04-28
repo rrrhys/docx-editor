@@ -1188,6 +1188,7 @@ function convertDocumentRunsToFlowRuns(content: unknown[]): Run[] {
         } else if (rc.type === 'drawing' && rc.image) {
           // Handle images/drawings
           const image = rc.image as Record<string, unknown>;
+          console.log('[docx-dbg] convertRuns drawing: src=', String(image.src).slice(0, 40));
           const size = image.size as { width: number; height: number } | undefined;
           // EMU to pixels: 1 inch = 914400 EMU, 1 inch = 96 pixels
           const emuToPixels = (emu: number) => Math.round((emu / 914400) * 96);
@@ -1216,6 +1217,45 @@ function convertDocumentRunsToFlowRuns(content: unknown[]): Run[] {
                 }
               : undefined,
           } as Run);
+        } else if (rc.type === 'shape' && rc.shape) {
+          // Render shapes (connectors, lines, rects) as inline SVG images
+          const shape = rc.shape as Record<string, unknown>;
+          const size = shape.size as { width: number; height: number } | undefined;
+          const emuToPixels = (emu: number) => Math.round((emu / 914400) * 96);
+          const wPx = size?.width ? emuToPixels(size.width) : 100;
+          const hPx = size?.height ? emuToPixels(size.height) : 4;
+          const shapeType = shape.shapeType as string | undefined;
+          const outline = shape.outline as
+            | { color?: { rgb?: string }; width?: number }
+            | undefined;
+          const fill = shape.fill as
+            | { type?: string; color?: { rgb?: string } }
+            | undefined;
+          const strokeColor = outline?.color?.rgb ? `#${outline.color.rgb}` : '#000000';
+          const strokePx = outline?.width ? Math.max(1, emuToPixels(outline.width)) : 1;
+          const fillColor =
+            fill?.type === 'solid' && fill?.color?.rgb
+              ? `#${fill.color.rgb}`
+              : 'none';
+
+          let svgBody: string;
+          const isConnector =
+            shapeType === 'line' ||
+            shapeType === 'straightConnector1' ||
+            (shapeType?.startsWith('bentConnector') ?? false) ||
+            (shapeType?.startsWith('curvedConnector') ?? false);
+
+          if (isConnector) {
+            // Horizontal line spanning full width, centred vertically
+            const cy = Math.round(hPx / 2);
+            svgBody = `<line x1="0" y1="${cy}" x2="${wPx}" y2="${cy}" stroke="${strokeColor}" stroke-width="${strokePx}"/>`;
+          } else {
+            svgBody = `<rect x="0" y="0" width="${wPx}" height="${hPx}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${strokePx}"/>`;
+          }
+
+          const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${wPx}" height="${hPx}">${svgBody}</svg>`;
+          const src = `data:image/svg+xml;base64,${btoa(svg)}`;
+          runs.push({ kind: 'image', src, width: wPx, height: hPx } as Run);
         }
       }
     }
