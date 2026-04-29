@@ -3780,7 +3780,15 @@ body { background: white; }
     }
 
     const pkg = history.state.package;
-    const sectionProps = pkg.document?.finalSectionProperties;
+    const finalProps = pkg.document?.finalSectionProperties;
+    // headerReferences live in the first section that defines them (a mid-doc w:pPr/w:sectPr),
+    // NOT necessarily in the body-level finalSectionProperties (which inherits but may be empty).
+    const sectionProps =
+      finalProps?.headerReferences?.length || finalProps?.footerReferences?.length
+        ? finalProps
+        : (pkg.document?.sections?.find(
+            (s) => s.properties?.headerReferences?.length || s.properties?.footerReferences?.length
+          )?.properties ?? finalProps);
     const headers = pkg.headers;
     const footers = pkg.footers;
 
@@ -3829,7 +3837,13 @@ body { background: white; }
   // If no header/footer exists, create an empty one so the user can add content
   const handleHeaderFooterDoubleClick = useCallback(
     (position: 'header' | 'footer', pageNumber?: number) => {
-      const sectProps = history.state?.package?.document?.finalSectionProperties;
+      const _finalProps = history.state?.package?.document?.finalSectionProperties;
+      const sectProps =
+        _finalProps?.headerReferences?.length || _finalProps?.footerReferences?.length
+          ? _finalProps
+          : (history.state?.package?.document?.sections?.find(
+              (s) => s.properties?.headerReferences?.length || s.properties?.footerReferences?.length
+            )?.properties ?? _finalProps);
       const isFirstPage = sectProps?.titlePg === true && (pageNumber ?? 1) === 1;
       const hf = isFirstPage
         ? position === 'header'

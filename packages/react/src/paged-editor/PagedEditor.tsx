@@ -1188,7 +1188,6 @@ function convertDocumentRunsToFlowRuns(content: unknown[]): Run[] {
         } else if (rc.type === 'drawing' && rc.image) {
           // Handle images/drawings
           const image = rc.image as Record<string, unknown>;
-          console.log('[docx-dbg] convertRuns drawing: src=', String(image.src).slice(0, 40));
           const size = image.size as { width: number; height: number } | undefined;
           // EMU to pixels: 1 inch = 914400 EMU, 1 inch = 96 pixels
           const emuToPixels = (emu: number) => Math.round((emu / 914400) * 96);
