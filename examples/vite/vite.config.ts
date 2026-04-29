@@ -51,6 +51,10 @@ export default defineConfig(async () => {
           replacement: path.join(monorepoRoot, 'packages/core/src/core.ts'),
         },
         { find: '@', replacement: path.join(monorepoRoot, 'packages/react/src') },
+        // Deduplicate React to avoid "multiple instances" hook errors
+        { find: 'react', replacement: path.join(__dirname, 'node_modules/react') },
+        { find: 'react-dom', replacement: path.join(__dirname, 'node_modules/react-dom') },
+        { find: 'react/jsx-runtime', replacement: path.join(__dirname, 'node_modules/react/jsx-runtime') },
       ],
     },
     css: {
