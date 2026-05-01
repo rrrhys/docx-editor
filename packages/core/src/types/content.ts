@@ -153,6 +153,8 @@ export interface VmlWatermarkContent {
   rotation?: number;
   /** z-index */
   zIndex?: number;
+  /** Raw XML of the original w:pict element, used for round-trip serialization */
+  rawPictXml?: string;
 }
 
 /**

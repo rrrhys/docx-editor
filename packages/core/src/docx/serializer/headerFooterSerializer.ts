@@ -11,6 +11,7 @@
  */
 
 import type { HeaderFooter, Paragraph, Table } from '../../types/document';
+import type { VmlWatermarkContent } from '../../types/content';
 import { serializeParagraph } from './paragraphSerializer';
 import { serializeTable } from './tableSerializer';
 
@@ -60,13 +61,23 @@ export function serializeHeaderFooter(hf: HeaderFooter): string {
   const rootTag = hf.type === 'header' ? 'w:hdr' : 'w:ftr';
   const nsDecl = buildNamespaceDeclarations();
 
+  // Serialize watermarks first (they sit before regular content in Word headers)
+  let watermarkXml = '';
+  if (hf.watermarks && hf.watermarks.length > 0) {
+    watermarkXml = hf.watermarks
+      .map((wm: VmlWatermarkContent) =>
+        wm.rawPictXml ? `<w:p><w:pPr/><w:r>${wm.rawPictXml}</w:r></w:p>` : ''
+      )
+      .join('');
+  }
+
   // Serialize content blocks
   let contentXml = hf.content.map((block) => serializeBlock(block)).join('');
 
   // Ensure at least one empty paragraph (required by OOXML spec)
-  if (!contentXml) {
+  if (!watermarkXml && !contentXml) {
     contentXml = '<w:p><w:pPr/></w:p>';
   }
 
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<${rootTag} ${nsDecl}>${contentXml}</${rootTag}>`;
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<${rootTag} ${nsDecl}>${watermarkXml}${contentXml}</${rootTag}>`;
 }

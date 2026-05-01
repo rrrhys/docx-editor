@@ -52,6 +52,7 @@ import {
   getTextContent,
   parseBooleanElement,
   parseNumericAttribute,
+  elementToXml,
   type XmlElement,
 } from './xmlParser';
 import { resolveThemeFontRef } from './themeParser';
@@ -703,6 +704,7 @@ function parseVmlWatermark(
   if (marginTop !== undefined) result.marginTop = marginTop;
   if (rotation !== undefined && !isNaN(rotation)) result.rotation = rotation;
   if (zIndex !== undefined && !isNaN(zIndex)) result.zIndex = zIndex;
+  result.rawPictXml = elementToXml(pictElement);
 
   return result;
 }
