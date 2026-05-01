@@ -317,6 +317,8 @@ export interface DocxEditorProps {
   onCut?: () => void;
   /** Callback when content is pasted */
   onPaste?: () => void;
+  /** Variables for the Insert > Variables menu: { category: variableNames[] } */
+  variables?: { [category: string]: string[] };
   /** Editor mode: 'editing' (direct edits), 'suggesting' (track changes), or 'viewing' (read-only). Default: 'editing' */
   mode?: EditorMode;
   /** Callback when the editing mode changes */
@@ -1067,6 +1069,7 @@ export const DocxEditor = forwardRef<DocxEditorRef, DocxEditorProps>(function Do
     documentNameEditable = true,
     renderTitleBarRight,
     i18n,
+    variables,
   },
   ref
 ) {
@@ -1940,6 +1943,17 @@ export const DocxEditor = forwardRef<DocxEditorRef, DocxEditorProps>(function Do
     generateTOC(view.state, view.dispatch);
     focusActiveEditor();
   }, [getActiveEditorView, focusActiveEditor]);
+
+  // Insert a variable token as plain text at cursor
+  const handleInsertVariable = useCallback(
+    (token: string) => {
+      const view = getActiveEditorView();
+      if (!view) return;
+      view.dispatch(view.state.tr.insertText(token));
+      focusActiveEditor();
+    },
+    [getActiveEditorView, focusActiveEditor]
+  );
 
   // Toggle document outline sidebar
   const handleToggleOutline = useCallback(() => {
@@ -4346,6 +4360,8 @@ body { background: white; }
                       onInsertImage={handleInsertImageClick}
                       onInsertPageBreak={handleInsertPageBreak}
                       onInsertTOC={handleInsertTOC}
+                      variables={variables}
+                      onInsertVariable={handleInsertVariable}
                       imageContext={state.pmImageContext}
                       onImageWrapType={handleImageWrapType}
                       onImageTransform={handleImageTransform}

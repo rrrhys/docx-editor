@@ -177,6 +177,10 @@ export interface ToolbarProps {
   onInsertPageBreak?: () => void;
   /** Callback when user wants to insert a table of contents */
   onInsertTOC?: () => void;
+  /** Variables for the Insert > Variables menu: { category: variableNames[] } */
+  variables?: { [category: string]: string[] };
+  /** Callback when a variable is selected from the menu */
+  onInsertVariable?: (token: string) => void;
   /** Callback when user wants to insert a shape */
   onInsertShape?: (data: {
     shapeType: string;

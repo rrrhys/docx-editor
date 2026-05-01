@@ -12,6 +12,7 @@ import React, { useCallback, Children, isValidElement } from 'react';
 import type { ReactNode } from 'react';
 import { MenuDropdown } from './ui/MenuDropdown';
 import type { MenuEntry } from './ui/MenuDropdown';
+import { VariablesSubmenu } from './ui/VariablesSubmenu';
 import { TableGridInline } from './ui/TableGridInline';
 import { useEditorToolbar } from './EditorToolbarContext';
 import type { FormattingAction } from './Toolbar';
@@ -122,6 +123,8 @@ export function MenuBar() {
     onInsertPageBreak,
     onInsertTOC,
     onRefocusEditor,
+    variables,
+    onInsertVariable,
   } = ctx;
 
   const handleFormat = useCallback(
@@ -233,6 +236,21 @@ export function MenuBar() {
             onClick: onInsertTOC,
             disabled: !onInsertTOC,
           },
+          ...(variables && Object.keys(variables).length > 0 && onInsertVariable
+            ? [
+                { type: 'separator' as const } as MenuEntry,
+                {
+                  label: 'Variables',
+                  submenuContent: (closeMenu: () => void) => (
+                    <VariablesSubmenu
+                      variables={variables}
+                      onInsert={onInsertVariable}
+                      closeMenu={closeMenu}
+                    />
+                  ),
+                } as MenuEntry,
+              ]
+            : []),
         ]}
       />
 
