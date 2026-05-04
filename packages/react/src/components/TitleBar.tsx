@@ -125,6 +125,7 @@ export function MenuBar() {
     onRefocusEditor,
     variables,
     onInsertVariable,
+    fileMenuExtra,
   } = ctx;
 
   const handleFormat = useCallback(
@@ -146,7 +147,7 @@ export function MenuBar() {
     [disabled, onInsertTable, onRefocusEditor]
   );
 
-  const hasFileMenu = (showPrintButton && onPrint) || onPageSetup;
+  const hasFileMenu = (showPrintButton && onPrint) || onPageSetup || (fileMenuExtra && fileMenuExtra.length > 0);
 
   return (
     <div className="flex items-center" role="menubar" aria-label={t('titleBar.menuBarAriaLabel')}>
@@ -175,6 +176,7 @@ export function MenuBar() {
                   } as MenuEntry,
                 ]
               : []),
+            ...(fileMenuExtra ?? []),
           ]}
         />
       )}

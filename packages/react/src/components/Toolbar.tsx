@@ -181,6 +181,8 @@ export interface ToolbarProps {
   variables?: { [category: string]: string[] };
   /** Callback when a variable is selected from the menu */
   onInsertVariable?: (token: string) => void;
+  /** Extra items to append to the File menu (imports, save, etc.) */
+  fileMenuExtra?: import('./ui/MenuDropdown').MenuEntry[];
   /** Callback when user wants to insert a shape */
   onInsertShape?: (data: {
     shapeType: string;

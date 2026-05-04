@@ -319,6 +319,8 @@ export interface DocxEditorProps {
   onPaste?: () => void;
   /** Variables for the Insert > Variables menu: { category: variableNames[] } */
   variables?: { [category: string]: string[] };
+  /** Extra items appended to the File menu (e.g. Save, Import DOCX) */
+  fileMenuExtra?: import('./ui/MenuDropdown').MenuEntry[];
   /** Editor mode: 'editing' (direct edits), 'suggesting' (track changes), or 'viewing' (read-only). Default: 'editing' */
   mode?: EditorMode;
   /** Callback when the editing mode changes */
@@ -1070,6 +1072,7 @@ export const DocxEditor = forwardRef<DocxEditorRef, DocxEditorProps>(function Do
     renderTitleBarRight,
     i18n,
     variables,
+    fileMenuExtra,
   },
   ref
 ) {
@@ -4362,6 +4365,7 @@ body { background: white; }
                       onInsertTOC={handleInsertTOC}
                       variables={variables}
                       onInsertVariable={handleInsertVariable}
+                      fileMenuExtra={fileMenuExtra}
                       imageContext={state.pmImageContext}
                       onImageWrapType={handleImageWrapType}
                       onImageTransform={handleImageTransform}
