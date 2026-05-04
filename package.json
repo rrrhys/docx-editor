@@ -1,13 +1,79 @@
 {
-  "name": "docx-editor-monorepo",
-  "version": "0.0.21",
-  "private": true,
+  "name": "@eigenpal/docx-js-editor",
+  "version": "0.1.1",
+  "description": "A browser-based DOCX template editor with variable insertion support",
   "workspaces": [
     "packages/*",
     "examples/agent-use-demo",
     "examples/agent-chat-demo"
   ],
-  "type": "module",
+  "main": "./packages/react/dist/index.js",
+  "module": "./packages/react/dist/index.mjs",
+  "types": "./packages/react/dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./packages/react/dist/index.d.ts",
+      "import": "./packages/react/dist/index.mjs",
+      "require": "./packages/react/dist/index.js"
+    },
+    "./react": {
+      "types": "./packages/react/dist/react.d.ts",
+      "import": "./packages/react/dist/react.mjs",
+      "require": "./packages/react/dist/react.js"
+    },
+    "./ui": {
+      "types": "./packages/react/dist/ui.d.ts",
+      "import": "./packages/react/dist/ui.mjs",
+      "require": "./packages/react/dist/ui.js"
+    },
+    "./core": {
+      "types": "./packages/react/dist/core-reexport.d.ts",
+      "import": "./packages/react/dist/core-reexport.mjs",
+      "require": "./packages/react/dist/core-reexport.js"
+    },
+    "./headless": {
+      "types": "./packages/react/dist/headless-reexport.d.ts",
+      "import": "./packages/react/dist/headless-reexport.mjs",
+      "require": "./packages/react/dist/headless-reexport.js"
+    },
+    "./core-plugins": {
+      "types": "./packages/react/dist/core-plugins-reexport.d.ts",
+      "import": "./packages/react/dist/core-plugins-reexport.mjs",
+      "require": "./packages/react/dist/core-plugins-reexport.js"
+    },
+    "./mcp": {
+      "types": "./packages/react/dist/mcp-reexport.d.ts",
+      "import": "./packages/react/dist/mcp-reexport.mjs",
+      "require": "./packages/react/dist/mcp-reexport.js"
+    },
+    "./styles.css": "./packages/react/dist/styles.css",
+    "./i18n/*.json": "./packages/react/i18n/*.json"
+  },
+  "typesVersions": {
+    "*": {
+      "react": [
+        "./packages/react/dist/react.d.ts"
+      ],
+      "ui": [
+        "./packages/react/dist/ui.d.ts"
+      ],
+      "core": [
+        "./packages/react/dist/core-reexport.d.ts"
+      ],
+      "headless": [
+        "./packages/react/dist/headless-reexport.d.ts"
+      ],
+      "core-plugins": [
+        "./packages/react/dist/core-plugins-reexport.d.ts"
+      ],
+      "mcp": [
+        "./packages/react/dist/mcp-reexport.d.ts"
+      ]
+    }
+  },
+  "sideEffects": [
+    "*.css"
+  ],
   "scripts": {
     "dev": "vite --config examples/vite/vite.config.ts",
     "dev:nextjs": "cd examples/nextjs && npm run dev",
@@ -33,7 +99,7 @@
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "bun run build && changeset publish",
-    "prepare": "husky"
+    "prepare": ""
   },
   "devDependencies": {
     "@changesets/changelog-github": "^0.6.0",
@@ -77,7 +143,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/eigenpal/docx-editor.git"
+    "url": "https://github.com/rrrhys/docx-editor.git"
   },
   "publishConfig": {
     "access": "public"
