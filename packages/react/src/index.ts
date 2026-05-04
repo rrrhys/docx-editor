@@ -114,6 +114,7 @@ export {
   ToolbarGroup,
   ToolbarSeparator,
 } from './components/Toolbar';
+export type { MenuEntry, MenuItem, MenuSeparator } from './components/ui/MenuDropdown';
 export {
   EditorToolbar,
   type EditorToolbarProps,
