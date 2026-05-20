@@ -305,6 +305,8 @@ export interface DocxEditorProps {
    * @example fontFamilies={[{ name: 'Roboto', fontFamily: 'Roboto, sans-serif', category: 'sans-serif' }]}
    */
   fontFamilies?: ReadonlyArray<string | FontOption>;
+  /** Fonts used in the current document — surfaced at the top of the font picker. */
+  featuredFontFamilies?: ReadonlyArray<string | FontOption>;
   /** Whether to show print button in toolbar (default: true) */
   showPrintButton?: boolean;
   /** Print options for print preview */
@@ -1044,6 +1046,7 @@ export const DocxEditor = forwardRef<DocxEditorRef, DocxEditorProps>(function Do
     showOutline: showOutlineProp = false,
     showOutlineButton = true,
     fontFamilies,
+    featuredFontFamilies,
     showPrintButton = true,
     printOptions: _printOptions,
     onPrint,
@@ -4353,6 +4356,7 @@ body { background: white; }
                       theme={history.state?.package.theme || theme}
                       showPrintButton={showPrintButton}
                       fontFamilies={fontFamilies}
+                      featuredFontFamilies={featuredFontFamilies}
                       onPrint={handleDirectPrint}
                       showZoomControl={showZoomControl}
                       zoom={state.zoom}

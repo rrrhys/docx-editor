@@ -137,6 +137,8 @@ export interface ToolbarProps {
    * An empty array renders an empty (but enabled) dropdown.
    */
   fontFamilies?: ReadonlyArray<string | FontOption>;
+  /** Fonts to surface at the top of the picker (e.g. fonts used in the current document). */
+  featuredFontFamilies?: ReadonlyArray<string | FontOption>;
   /** Whether to show font size picker (default: true) */
   showFontSizePicker?: boolean;
   /** Whether to show text color picker (default: true) */
