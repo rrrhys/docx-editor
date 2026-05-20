@@ -102,6 +102,7 @@ export {
   canRenderFont,
   preloadCommonFonts,
 } from '@eigenpal/docx-core/utils/fontLoader';
+export { extractFonts } from '@eigenpal/docx-core/utils/fontExtractor';
 
 // ============================================================================
 // UI COMPONENTS

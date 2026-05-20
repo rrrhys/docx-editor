@@ -87,6 +87,7 @@ export function FormattingBar(explicitProps: FormattingBarProps) {
     children,
     showFontPicker = true,
     fontFamilies,
+    featuredFontFamilies,
     showFontSizePicker = true,
     showTextColorPicker = true,
     showHighlightColorPicker = true,
@@ -145,6 +146,7 @@ export function FormattingBar(explicitProps: FormattingBarProps) {
   );
 
   const normalizedFonts = React.useMemo(() => normalizeFontFamilies(fontFamilies), [fontFamilies]);
+  const normalizedFeaturedFonts = React.useMemo(() => normalizeFontFamilies(featuredFontFamilies), [featuredFontFamilies]);
 
   const handleFontSizeChange = useCallback(
     (sizeInPoints: number) => {
@@ -417,6 +419,7 @@ export function FormattingBar(explicitProps: FormattingBarProps) {
               value={currentFormatting.fontFamily || 'Arial'}
               onChange={handleFontFamilyChange}
               fonts={normalizedFonts}
+              featuredFonts={normalizedFeaturedFonts}
               disabled={disabled}
               width={60}
               placeholder="Arial"
