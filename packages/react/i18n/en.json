@@ -110,6 +110,9 @@
   },
   "font": {
     "selectAriaLabel": "Select font family",
+    "searchPlaceholder": "Search fonts…",
+    "documentFonts": "Document",
+    "noFontsFound": "No fonts found",
     "sansSerif": "Sans Serif",
     "serif": "Serif",
     "monospace": "Monospace"
