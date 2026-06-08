@@ -17,7 +17,18 @@ import { TableGridInline } from './ui/TableGridInline';
 import { useEditorToolbar } from './EditorToolbarContext';
 import type { FormattingAction } from './Toolbar';
 import { useTranslation } from '../i18n';
-import { openReportIssue } from './reportIssue';
+declare const __APP_VERSION__: string;
+declare const __COMMIT_HASH__: string;
+
+function getEditorVersion(): string {
+  try {
+    const ver = __APP_VERSION__;
+    const hash = __COMMIT_HASH__;
+    return hash ? `v${ver} (${hash})` : `v${ver}`;
+  } catch {
+    return '';
+  }
+}
 
 // ============================================================================
 // Default Doc Icon (shown when no Logo is provided)
@@ -262,8 +273,8 @@ export function MenuBar() {
         disabled={disabled}
         items={[
           {
-            label: t('toolbar.reportIssue'),
-            onClick: () => openReportIssue(),
+            label: getEditorVersion() || t('toolbar.version'),
+            disabled: true,
           } as MenuEntry,
         ]}
       />

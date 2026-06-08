@@ -120,7 +120,7 @@ function collectNewImages(blocks: BlockContent[]): Image[] {
       for (const item of block.content) {
         if (item.type === 'run') {
           for (const c of item.content) {
-            if (c.type === 'drawing' && c.image.src?.startsWith('data:')) {
+            if (c.type === 'drawing' && c.image.src?.startsWith('data:') && !c.image.rId) {
               images.push(c.image);
             }
           }

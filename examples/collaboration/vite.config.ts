@@ -3,6 +3,14 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from 'tailwindcss';
 import autoprefixer from 'autoprefixer';
 import path from 'path';
+import { execSync } from 'child_process';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+const pkg = require('../../packages/react/package.json') as { version: string };
+const commitHash = (() => {
+  try { return execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim(); } catch { return ''; }
+})();
 
 const monorepoRoot = path.resolve(__dirname, '../..');
 
@@ -67,6 +75,8 @@ export default defineConfig(async () => {
         process.env.ENABLE_FRAMEWORK_SWITCHER === 'true'
       ),
       __GITHUB_STARS__: JSON.stringify(stars),
+      __APP_VERSION__: JSON.stringify(pkg.version),
+      __COMMIT_HASH__: JSON.stringify(commitHash),
     },
     server: {
       port: 5273,

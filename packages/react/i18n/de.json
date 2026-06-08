@@ -36,7 +36,7 @@
     "tableOfContents": "Inhaltsverzeichnis",
     "symbol": "Symbol",
     "help": "Hilfe",
-    "reportIssue": "Problem melden"
+    "version": null
   },
   "formattingBar": {
     "groups": {
@@ -112,7 +112,10 @@
     "selectAriaLabel": "Schriftart auswählen",
     "sansSerif": "Sans Serif",
     "serif": "Serif",
-    "monospace": "Monospace"
+    "monospace": "Monospace",
+    "documentFonts": null,
+    "noFontsFound": null,
+    "searchPlaceholder": null
   },
   "fontSize": {
     "decrease": "Schriftgrad verkleinern",

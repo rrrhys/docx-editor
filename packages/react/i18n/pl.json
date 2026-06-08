@@ -36,7 +36,7 @@
     "tableOfContents": "Spis treści",
     "symbol": "Symbol",
     "help": "Pomoc",
-    "reportIssue": "Zgłoś problem"
+    "version": null
   },
   "formattingBar": {
     "groups": {
@@ -112,7 +112,10 @@
     "selectAriaLabel": "Wybierz rodzinę czcionek",
     "sansSerif": "Sans Serif",
     "serif": "Serif",
-    "monospace": "Monospace"
+    "monospace": "Monospace",
+    "documentFonts": null,
+    "noFontsFound": null,
+    "searchPlaceholder": null
   },
   "fontSize": {
     "decrease": "Zmniejsz rozmiar czcionki",

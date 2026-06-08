@@ -1,4 +1,12 @@
 import { defineConfig } from 'tsup';
+import { execSync } from 'child_process';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
+
+const pkg = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf8')) as { version: string };
+const commitHash = (() => {
+  try { return execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim(); } catch { return ''; }
+})();
 
 export default defineConfig({
   entry: {
@@ -31,4 +39,8 @@ export default defineConfig({
     'prosemirror-view',
   ],
   injectStyle: false,
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __COMMIT_HASH__: JSON.stringify(commitHash),
+  },
 });
