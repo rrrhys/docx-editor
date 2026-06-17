@@ -97,8 +97,13 @@ function serializeMeasurement(
  * Serialize a single border element
  */
 function serializeBorder(border: BorderSpec | undefined, elementName: string): string {
-  if (!border || border.style === 'none' || border.style === 'nil') {
-    return '';
+  if (!border) return '';
+
+  // Explicit "none"/"nil" must still emit an element so Word overrides any
+  // border inherited from the table style.  Omitting the element entirely
+  // would leave the style-inherited border visible.
+  if (border.style === 'none' || border.style === 'nil') {
+    return `<w:${elementName} w:val="${border.style}" w:sz="0" w:space="0" w:color="auto"/>`;
   }
 
   const attrs: string[] = [`w:val="${border.style}"`];
