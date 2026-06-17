@@ -66,6 +66,8 @@ export interface SelectiveSaveOptions {
   structuralChange: boolean;
   /** Whether any changes affected paragraphs without paraId */
   hasUntrackedChanges: boolean;
+  /** Whether any changes affected non-paragraph nodes (tables, cells, rows, images) */
+  hasNonParagraphChanges: boolean;
 }
 
 /**
@@ -81,11 +83,12 @@ export async function attemptSelectiveSave(
   originalBuffer: ArrayBuffer,
   options: SelectiveSaveOptions
 ): Promise<ArrayBuffer | null> {
-  const { changedParaIds, structuralChange, hasUntrackedChanges } = options;
+  const { changedParaIds, structuralChange, hasUntrackedChanges, hasNonParagraphChanges } = options;
 
   // Bail out conditions — fall back to full repack
   if (structuralChange) return null;
   if (hasUntrackedChanges) return null;
+  if (hasNonParagraphChanges) return null;
   if (!originalBuffer) return null;
 
   // Check for new images/hyperlinks that need relationship management

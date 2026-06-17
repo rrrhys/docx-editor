@@ -213,6 +213,7 @@ import {
   getChangedParagraphIds,
   hasStructuralChanges,
   hasUntrackedChanges,
+  hasNonParagraphChanges,
   clearTrackedChanges,
 } from '@eigenpal/docx-core/prosemirror/extensions/features/ParagraphChangeTrackerExtension';
 
@@ -3289,6 +3290,7 @@ export const DocxEditor = forwardRef<DocxEditorRef, DocxEditorProps>(function Do
               changedParaIds: getChangedParagraphIds(editorState),
               structuralChange: hasStructuralChanges(editorState) || hasInjectedReplies,
               hasUntrackedChanges: hasUntrackedChanges(editorState),
+              hasNonParagraphChanges: hasNonParagraphChanges(editorState),
             },
           };
         }

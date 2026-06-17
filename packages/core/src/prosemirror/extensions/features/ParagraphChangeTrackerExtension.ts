@@ -2,7 +2,9 @@
  * Paragraph Change Tracker Extension
  *
  * Watches ProseMirror transactions and records which paragraph IDs (paraId)
- * were modified. Also detects structural changes (paragraphs added/deleted).
+ * were modified. Also detects structural changes (paragraphs added/deleted)
+ * and non-paragraph node attribute changes (tables, cells, rows, images)
+ * that selective save cannot patch — those must fall back to full repack.
  * Used by the selective save system to patch only changed paragraphs in document.xml.
  */
 
@@ -27,6 +29,12 @@ export interface ParagraphChangeTrackerState {
   structuralChange: boolean;
   /** Whether any edited paragraph lacked a paraId */
   hasUntrackedChanges: boolean;
+  /**
+   * Whether any step modified a non-paragraph node (table, table_row, table_cell,
+   * image, etc.) whose changes selective save cannot patch. When true, the caller
+   * must fall back to a full repack instead of selective patching.
+   */
+  hasNonParagraphChanges: boolean;
   /** Cached paragraph count to avoid full doc traversal on every transaction */
   paragraphCount: number;
 }
@@ -114,6 +122,7 @@ function createParagraphChangeTrackerPlugin(): Plugin<ParagraphChangeTrackerStat
           changedParaIds: new Set(),
           structuralChange: false,
           hasUntrackedChanges: false,
+          hasNonParagraphChanges: false,
           paragraphCount: countParagraphs(state.doc),
         };
       },
@@ -124,6 +133,7 @@ function createParagraphChangeTrackerPlugin(): Plugin<ParagraphChangeTrackerStat
             changedParaIds: new Set(),
             structuralChange: false,
             hasUntrackedChanges: false,
+            hasNonParagraphChanges: false,
             paragraphCount: prevState.paragraphCount,
           };
         }
@@ -141,6 +151,7 @@ function createParagraphChangeTrackerPlugin(): Plugin<ParagraphChangeTrackerStat
           changedParaIds: new Set(prevState.changedParaIds),
           structuralChange: prevState.structuralChange,
           hasUntrackedChanges: prevState.hasUntrackedChanges,
+          hasNonParagraphChanges: prevState.hasNonParagraphChanges,
           paragraphCount: newCount,
         };
 
@@ -181,15 +192,34 @@ function createParagraphChangeTrackerPlugin(): Plugin<ParagraphChangeTrackerStat
           }
 
           const stepMap = step.getMap();
+          let stepFoundParagraphs = false;
+          const stepRangeStarts: number[] = [];
+
           stepMap.forEach((_oldStart, _oldEnd, newStart, newEnd) => {
             const { ids, hasUntracked } = collectAffectedParaIds(tr.doc, newStart, newEnd);
             for (const id of ids) {
               newState.changedParaIds.add(id);
+              stepFoundParagraphs = true;
             }
             if (hasUntracked) {
               newState.hasUntrackedChanges = true;
+              stepFoundParagraphs = true;
             }
+            stepRangeStarts.push(newStart);
           });
+
+          // If the step changed the doc but touched no paragraphs, check whether
+          // it modified a non-paragraph structural node (table, table_cell, table_row,
+          // image, etc.). Selective save cannot patch those — flag for full repack.
+          if (!stepFoundParagraphs) {
+            for (const pos of stepRangeStarts) {
+              const node = tr.doc.nodeAt(pos);
+              if (node && node.type.name !== 'paragraph' && node.type.name !== 'text') {
+                newState.hasNonParagraphChanges = true;
+                break;
+              }
+            }
+          }
         }
 
         return newState;
@@ -226,6 +256,15 @@ export function hasStructuralChanges(state: EditorState): boolean {
 export function hasUntrackedChanges(state: EditorState): boolean {
   const trackerState = getChangeTrackerState(state);
   return trackerState?.hasUntrackedChanges ?? false;
+}
+
+/**
+ * Check if any changes affected non-paragraph nodes (tables, cells, rows, images)
+ * that selective save cannot patch — caller must fall back to full repack.
+ */
+export function hasNonParagraphChanges(state: EditorState): boolean {
+  const trackerState = getChangeTrackerState(state);
+  return trackerState?.hasNonParagraphChanges ?? false;
 }
 
 /**
