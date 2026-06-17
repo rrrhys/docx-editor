@@ -193,7 +193,6 @@ function createParagraphChangeTrackerPlugin(): Plugin<ParagraphChangeTrackerStat
 
           const stepMap = step.getMap();
           let stepFoundParagraphs = false;
-          const stepRangeStarts: number[] = [];
 
           stepMap.forEach((_oldStart, _oldEnd, newStart, newEnd) => {
             const { ids, hasUntracked } = collectAffectedParaIds(tr.doc, newStart, newEnd);
@@ -205,20 +204,13 @@ function createParagraphChangeTrackerPlugin(): Plugin<ParagraphChangeTrackerStat
               newState.hasUntrackedChanges = true;
               stepFoundParagraphs = true;
             }
-            stepRangeStarts.push(newStart);
           });
 
-          // If the step changed the doc but touched no paragraphs, check whether
-          // it modified a non-paragraph structural node (table, table_cell, table_row,
-          // image, etc.). Selective save cannot patch those — flag for full repack.
+          // If the step changed the doc but touched no paragraphs, it modified a
+          // non-paragraph structural node (table, table_cell, table_row, image, etc.)
+          // that selective save cannot patch — flag for full repack.
           if (!stepFoundParagraphs) {
-            for (const pos of stepRangeStarts) {
-              const node = tr.doc.nodeAt(pos);
-              if (node && node.type.name !== 'paragraph' && node.type.name !== 'text') {
-                newState.hasNonParagraphChanges = true;
-                break;
-              }
-            }
+            newState.hasNonParagraphChanges = true;
           }
         }
 
