@@ -324,6 +324,11 @@ export interface DocxEditorProps {
   variables?: { [category: string]: string[] };
   /** Extra items appended to the File menu (e.g. Save, Import DOCX) */
   fileMenuExtra?: import('./ui/MenuDropdown').MenuEntry[];
+  /**
+   * Custom content rendered at the end of the menu bar row (after the
+   * File/Format/Insert/Help menus) — typically a save-status indicator.
+   */
+  menuBarExtra?: ReactNode;
   /** Editor mode: 'editing' (direct edits), 'suggesting' (track changes), or 'viewing' (read-only). Default: 'editing' */
   mode?: EditorMode;
   /** Callback when the editing mode changes */
@@ -1018,6 +1023,30 @@ function findTextInPmParagraph(
 }
 
 /**
+ * Resolve the section properties that actually carry header/footer references.
+ *
+ * In multi-section DOCX files (different first-page header, landscape page,
+ * any explicit section break) the header/footer references live on a
+ * mid-document sectPr rather than the body-level finalSectionProperties, which
+ * inherits but is frequently empty. Header display and double-click already use
+ * this fallback; save/remove must use the same lookup or they fail to find the
+ * active reference and silently drop the edit.
+ */
+function resolveRefSectionProps(
+  pkg: Document['package']
+): SectionProperties | undefined {
+  const finalProps = pkg.document?.finalSectionProperties;
+  if (finalProps?.headerReferences?.length || finalProps?.footerReferences?.length) {
+    return finalProps;
+  }
+  return (
+    pkg.document?.sections?.find(
+      (s) => s.properties?.headerReferences?.length || s.properties?.footerReferences?.length
+    )?.properties ?? finalProps
+  );
+}
+
+/**
  * DocxEditor - Complete DOCX editor component
  */
 export const DocxEditor = forwardRef<DocxEditorRef, DocxEditorProps>(function DocxEditor(
@@ -1077,6 +1106,7 @@ export const DocxEditor = forwardRef<DocxEditorRef, DocxEditorProps>(function Do
     i18n,
     variables,
     fileMenuExtra,
+    menuBarExtra,
   },
   ref
 ) {
@@ -3802,15 +3832,7 @@ body { background: white; }
     }
 
     const pkg = history.state.package;
-    const finalProps = pkg.document?.finalSectionProperties;
-    // headerReferences live in the first section that defines them (a mid-doc w:pPr/w:sectPr),
-    // NOT necessarily in the body-level finalSectionProperties (which inherits but may be empty).
-    const sectionProps =
-      finalProps?.headerReferences?.length || finalProps?.footerReferences?.length
-        ? finalProps
-        : (pkg.document?.sections?.find(
-            (s) => s.properties?.headerReferences?.length || s.properties?.footerReferences?.length
-          )?.properties ?? finalProps);
+    const sectionProps = resolveRefSectionProps(pkg);
     const headers = pkg.headers;
     const footers = pkg.footers;
 
@@ -3859,13 +3881,8 @@ body { background: white; }
   // If no header/footer exists, create an empty one so the user can add content
   const handleHeaderFooterDoubleClick = useCallback(
     (position: 'header' | 'footer', pageNumber?: number) => {
-      const _finalProps = history.state?.package?.document?.finalSectionProperties;
-      const sectProps =
-        _finalProps?.headerReferences?.length || _finalProps?.footerReferences?.length
-          ? _finalProps
-          : (history.state?.package?.document?.sections?.find(
-              (s) => s.properties?.headerReferences?.length || s.properties?.footerReferences?.length
-            )?.properties ?? _finalProps);
+      const pkg = history.state?.package;
+      const sectProps = pkg ? resolveRefSectionProps(pkg) : undefined;
       const isFirstPage = sectProps?.titlePg === true && (pageNumber ?? 1) === 1;
       const hf = isFirstPage
         ? position === 'header'
@@ -3881,8 +3898,7 @@ body { background: white; }
       }
 
       // Create empty header/footer for docs that don't have one yet
-      if (!history.state?.package) return;
-      const pkg = history.state.package;
+      if (!pkg) return;
       const sectionProps = pkg.document?.finalSectionProperties;
       if (!sectionProps) return;
 
@@ -3965,7 +3981,7 @@ body { background: white; }
       }
 
       const pkg = history.state.package;
-      const sectionProps = pkg.document?.finalSectionProperties;
+      const sectionProps = resolveRefSectionProps(pkg);
       const refs =
         hfEditPosition === 'header'
           ? sectionProps?.headerReferences
@@ -4026,7 +4042,7 @@ body { background: white; }
     }
 
     const pkg = history.state.package;
-    const sectionProps = pkg.document?.finalSectionProperties;
+    const sectionProps = resolveRefSectionProps(pkg);
     const refKey = hfEditPosition === 'header' ? 'headerReferences' : 'footerReferences';
     const mapKey = hfEditPosition === 'header' ? 'headers' : 'footers';
     const refs = sectionProps?.[refKey];
@@ -4043,20 +4059,33 @@ body { background: white; }
 
       const newRefs = (refs ?? []).filter((r) => r.rId !== activeRef.rId);
 
+      // Write the filtered refs back to wherever they actually live — the
+      // body-level finalSectionProperties or a mid-document section's sectPr.
+      const doc = pkg.document;
+      const finalProps = doc?.finalSectionProperties;
+      const refsOnFinal = sectionProps === finalProps;
+      const newDocument = doc
+        ? {
+            ...doc,
+            finalSectionProperties: refsOnFinal
+              ? { ...finalProps, [refKey]: newRefs }
+              : finalProps,
+            sections: refsOnFinal
+              ? doc.sections
+              : doc.sections?.map((s) =>
+                  s.properties === sectionProps
+                    ? { ...s, properties: { ...s.properties, [refKey]: newRefs } }
+                    : s
+                ),
+          }
+        : doc;
+
       const newDoc: Document = {
         ...history.state,
         package: {
           ...pkg,
           [mapKey]: newMap,
-          document: pkg.document
-            ? {
-                ...pkg.document,
-                finalSectionProperties: {
-                  ...sectionProps,
-                  [refKey]: newRefs,
-                },
-              }
-            : pkg.document,
+          document: newDocument,
         },
       };
       pushDocument(newDoc);
@@ -4372,6 +4401,7 @@ body { background: white; }
                       variables={variables}
                       onInsertVariable={handleInsertVariable}
                       fileMenuExtra={fileMenuExtra}
+                      menuBarExtra={menuBarExtra}
                       imageContext={state.pmImageContext}
                       onImageWrapType={handleImageWrapType}
                       onImageTransform={handleImageTransform}

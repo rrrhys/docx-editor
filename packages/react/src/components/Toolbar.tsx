@@ -185,6 +185,12 @@ export interface ToolbarProps {
   onInsertVariable?: (token: string) => void;
   /** Extra items to append to the File menu (imports, save, etc.) */
   fileMenuExtra?: import('./ui/MenuDropdown').MenuEntry[];
+  /**
+   * Custom content rendered at the end of the menu bar row (after the
+   * File/Format/Insert/Help menus). Typically a small save-status indicator
+   * ("Saving…" / "Saved" / "Unsaved changes"), Google Docs style.
+   */
+  menuBarExtra?: ReactNode;
   /** Callback when user wants to insert a shape */
   onInsertShape?: (data: {
     shapeType: string;

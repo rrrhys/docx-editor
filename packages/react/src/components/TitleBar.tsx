@@ -137,6 +137,7 @@ export function MenuBar() {
     variables,
     onInsertVariable,
     fileMenuExtra,
+    menuBarExtra,
   } = ctx;
 
   const handleFormat = useCallback(
@@ -278,6 +279,9 @@ export function MenuBar() {
           } as MenuEntry,
         ]}
       />
+
+      {/* Host-provided menu-bar content (e.g. save status indicator) */}
+      {menuBarExtra && <div className="flex items-center ml-3 min-w-0">{menuBarExtra}</div>}
     </div>
   );
 }
