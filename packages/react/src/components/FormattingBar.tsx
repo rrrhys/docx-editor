@@ -16,7 +16,7 @@ import { FontSizePicker, halfPointsToPoints } from './ui/FontSizePicker';
 import { ColorPicker } from './ui/ColorPicker';
 import { AlignmentButtons } from './ui/AlignmentButtons';
 import { ListButtons, createDefaultListState } from './ui/ListButtons';
-import { LineSpacingPicker } from './ui/LineSpacingPicker';
+import { LineSpacingPicker, ParagraphSpacingPicker } from './ui/LineSpacingPicker';
 import { StylePicker } from './ui/StylePicker';
 import { MaterialSymbol } from './ui/MaterialSymbol';
 import { ZoomControl } from './ui/ZoomControl';
@@ -94,6 +94,7 @@ export function FormattingBar(explicitProps: FormattingBarProps) {
     showAlignmentButtons = true,
     showListButtons = true,
     showLineSpacingPicker = true,
+    showParagraphSpacingPicker = true,
     showStylePicker = true,
     documentStyles,
     theme,
@@ -216,6 +217,16 @@ export function FormattingBar(explicitProps: FormattingBarProps) {
     (twipsValue: number) => {
       if (!disabled && onFormat) {
         onFormat({ type: 'lineSpacing', value: twipsValue });
+        requestAnimationFrame(() => onRefocusEditor?.());
+      }
+    },
+    [disabled, onFormat, onRefocusEditor]
+  );
+
+  const handleParagraphSpacingChange = useCallback(
+    (twipsValue: number) => {
+      if (!disabled && onFormat) {
+        onFormat({ type: 'paragraphSpacing', value: twipsValue });
         requestAnimationFrame(() => onRefocusEditor?.());
       }
     },
@@ -543,7 +554,7 @@ export function FormattingBar(explicitProps: FormattingBarProps) {
       )}
 
       {/* List Buttons and Line Spacing */}
-      {(showListButtons || showLineSpacingPicker) && (
+      {(showListButtons || showLineSpacingPicker || showParagraphSpacingPicker) && (
         <ToolbarGroup label={t('formattingBar.groups.listFormatting')}>
           {showListButtons && (
             <ListButtons
@@ -562,6 +573,13 @@ export function FormattingBar(explicitProps: FormattingBarProps) {
             <LineSpacingPicker
               value={currentFormatting.lineSpacing}
               onChange={handleLineSpacingChange}
+              disabled={disabled}
+            />
+          )}
+          {showParagraphSpacingPicker && (
+            <ParagraphSpacingPicker
+              value={currentFormatting.paragraphSpacing}
+              onChange={handleParagraphSpacingChange}
               disabled={disabled}
             />
           )}

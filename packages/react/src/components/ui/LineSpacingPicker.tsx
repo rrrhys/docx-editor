@@ -9,10 +9,7 @@ import * as React from 'react';
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
-  SelectSeparator,
   SelectTrigger,
 } from './Select';
 import { cn } from '../../lib/utils';
@@ -106,10 +103,70 @@ export function LineSpacingPicker({
             {getOptionLabel(option)}
           </SelectItem>
         ))}
-        <SelectSeparator />
-        <SelectGroup>
-          <SelectLabel>{t('lineSpacing.paragraphSpacing')}</SelectLabel>
-        </SelectGroup>
+      </SelectContent>
+    </Select>
+  );
+}
+
+export interface ParagraphSpacingPickerProps {
+  /** Current space-after value in twips */
+  value?: number;
+  onChange?: (twipsValue: number) => void;
+  options?: LineSpacingOption[];
+  className?: string;
+  disabled?: boolean;
+}
+
+/**
+ * ParagraphSpacingPicker - sets space AFTER the paragraph, using the same
+ * preset multipliers as line spacing (Single/1.15/1.5/Double). Mirrors
+ * LineSpacingPicker but is a separate control so its current value highlights
+ * independently. Defaults to Single when unset.
+ */
+export function ParagraphSpacingPicker({
+  value,
+  onChange,
+  options = DEFAULT_OPTIONS,
+  className,
+  disabled = false,
+}: ParagraphSpacingPickerProps) {
+  const { t } = useTranslation();
+
+  const currentOption = React.useMemo(() => {
+    if (value === undefined) return options[0];
+    return options.find((opt) => opt.twipsValue === value) || options[0];
+  }, [value, options]);
+
+  const handleValueChange = React.useCallback(
+    (newValue: string) => {
+      onChange?.(parseInt(newValue, 10));
+    },
+    [onChange]
+  );
+
+  const getOptionLabel = (option: LineSpacingOption) =>
+    option.labelKey ? t(option.labelKey) : option.label;
+
+  return (
+    <Select
+      value={currentOption.twipsValue.toString()}
+      onValueChange={handleValueChange}
+      disabled={disabled}
+    >
+      <SelectTrigger
+        className={cn('h-8 text-sm gap-1 px-2', className)}
+        style={{ width: 'auto' }}
+        title={t('lineSpacing.paragraphSpacing')}
+      >
+        <span className="font-semibold">¶</span>
+        <span className="text-xs">{getOptionLabel(currentOption)}</span>
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((option) => (
+          <SelectItem key={option.twipsValue} value={option.twipsValue.toString()}>
+            {getOptionLabel(option)}
+          </SelectItem>
+        ))}
       </SelectContent>
     </Select>
   );

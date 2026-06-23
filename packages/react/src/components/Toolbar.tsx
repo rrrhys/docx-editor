@@ -66,6 +66,7 @@ export interface SelectionFormatting {
   listState?: ListState;
   /** Line spacing in twips (OOXML value, 240 = single spacing) */
   lineSpacing?: number;
+  paragraphSpacing?: number;
   /** Paragraph style ID */
   styleId?: string;
   /** Paragraph left indentation in twips */
@@ -98,6 +99,7 @@ export type FormattingAction =
   | { type: 'highlightColor'; value: string }
   | { type: 'alignment'; value: ParagraphAlignment }
   | { type: 'lineSpacing'; value: number }
+  | { type: 'paragraphSpacing'; value: number }
   | { type: 'applyStyle'; value: string };
 
 /**
@@ -151,6 +153,8 @@ export interface ToolbarProps {
   showListButtons?: boolean;
   /** Whether to show line spacing picker (default: true) */
   showLineSpacingPicker?: boolean;
+  /** Whether to show paragraph spacing picker (default: true) */
+  showParagraphSpacingPicker?: boolean;
   /** Whether to show style picker (default: true) */
   showStylePicker?: boolean;
   /** Document styles for the style picker */

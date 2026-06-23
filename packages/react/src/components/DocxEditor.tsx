@@ -147,6 +147,7 @@ import {
   setFontFamily,
   setAlignment,
   setLineSpacing,
+  setSpaceAfter,
   toggleBulletList,
   toggleNumberedList,
   increaseIndent,
@@ -2635,6 +2636,9 @@ export const DocxEditor = forwardRef<DocxEditorRef, DocxEditorProps>(function Do
             break;
           case 'lineSpacing':
             setLineSpacing(action.value)(view.state, view.dispatch);
+            break;
+          case 'paragraphSpacing':
+            setSpaceAfter(action.value)(view.state, view.dispatch);
             break;
           case 'applyStyle': {
             // Resolve style to get its formatting properties

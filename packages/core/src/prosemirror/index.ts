@@ -80,6 +80,7 @@ export {
   alignRight,
   alignJustify,
   setLineSpacing,
+  setSpaceAfter,
   increaseIndent,
   decreaseIndent,
   setIndentLeft,

@@ -140,6 +140,9 @@ export function extractSelectionState(state: EditorState): SelectionState | null
       paragraphFormatting.lineSpacing = paragraph.attrs.lineSpacing;
       paragraphFormatting.lineSpacingRule = paragraph.attrs.lineSpacingRule;
     }
+    if (paragraph.attrs.spaceAfter != null) {
+      paragraphFormatting.spaceAfter = paragraph.attrs.spaceAfter;
+    }
     if (paragraph.attrs.numPr) {
       paragraphFormatting.numPr = paragraph.attrs.numPr;
     }
