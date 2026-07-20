@@ -719,7 +719,10 @@ function executeInsertImage(doc: Document, command: InsertImageCommand): Documen
   // Create image
   const image: Image = {
     type: 'image',
-    rId: `rId_img_${Date.now()}`,
+    // Empty rId marks the image as new; the real one is assigned by
+    // processNewImages() at save (a fake truthy rId would serialize as a
+    // dangling r:embed and the image would be lost on reopen).
+    rId: '',
     src: command.src,
     alt: command.alt,
     size: {

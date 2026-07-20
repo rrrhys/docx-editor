@@ -2047,13 +2047,15 @@ export const DocxEditor = forwardRef<DocxEditorRef, DocxEditorProps>(function Do
             height = Math.round(height * scale);
           }
 
-          const rId = `rId_img_${Date.now()}`;
+          // No rId: a truthy placeholder here would make the save pipeline
+          // treat the image as already-embedded and emit a dangling r:embed,
+          // silently losing the image on reopen. The real rId is assigned by
+          // processNewImages() during save.
           const imageNode = view.state.schema.nodes.image.create({
             src: dataUrl,
             alt: file.name,
             width,
             height,
-            rId,
             wrapType: 'inline',
             displayMode: 'inline',
           });

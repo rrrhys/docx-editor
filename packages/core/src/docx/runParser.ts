@@ -776,7 +776,6 @@ function parseRunContents(
 
       case 'drawing': {
         const drawing = parseDrawingContent(child, rels, media);
-        console.log('[docx-dbg] drawing case: src=', drawing?.image?.src?.slice(0, 40), 'relsSize=', rels?.size, 'mediaSize=', media?.size);
         if (drawing?.image?.src) {
           contents.push(drawing);
         } else {

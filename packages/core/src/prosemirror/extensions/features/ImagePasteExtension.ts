@@ -64,12 +64,14 @@ async function insertImageFiles(view: EditorView, files: File[]): Promise<void> 
       height = Math.max(1, Math.round(height * scale));
     }
 
+    // No rId: a truthy placeholder would make the save pipeline treat the
+    // image as already-embedded (dangling r:embed, image lost on reopen).
+    // The real rId is assigned by processNewImages() during save.
     const imageNode = imageType.create({
       src: dataUrl,
       alt: file.name,
       width,
       height,
-      rId: `rId_img_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       wrapType: 'inline',
       displayMode: 'inline',
     });

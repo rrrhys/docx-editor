@@ -110,7 +110,12 @@ async function serializeCommentsToZip(
 
 /**
  * Collect all images with data-URL src from the document content.
- * These are newly inserted images that need to be added to the ZIP.
+ * These are candidate new images; processNewImages() decides per part whether
+ * each one actually needs embedding by checking its rId against the part's
+ * rels file. An rId not present in the rels (e.g. a placeholder stamped at
+ * insert time) must NOT exempt an image from embedding — trusting it produces
+ * a document.xml that references a dangling relationship with no media bytes,
+ * i.e. the image silently disappears on reopen.
  */
 function collectNewImages(blocks: BlockContent[]): Image[] {
   const images: Image[] = [];
@@ -120,7 +125,7 @@ function collectNewImages(blocks: BlockContent[]): Image[] {
       for (const item of block.content) {
         if (item.type === 'run') {
           for (const c of item.content) {
-            if (c.type === 'drawing' && c.image.src?.startsWith('data:') && !c.image.rId) {
+            if (c.type === 'drawing' && c.image.src?.startsWith('data:')) {
               images.push(c.image);
             }
           }
@@ -292,16 +297,76 @@ async function processNewImages(
   let maxImageNum = findMaxImageNum(zip);
   const extensionsAdded = new Set<string>();
 
+  /**
+   * Find an existing `word/media/*` file whose bytes are identical to `data`.
+   * Lets a re-save of an image the caller re-presents as new (e.g. the editor
+   * state was rebuilt from ProseMirror and lost the assigned rId) reuse the
+   * already-embedded copy instead of growing the package on every save.
+   */
+  const findExistingMediaMatch = async (data: ArrayBuffer): Promise<string | null> => {
+    const bytes = new Uint8Array(data);
+    const candidates: string[] = [];
+    zip.forEach((relativePath) => {
+      if (/^word\/media\//.test(relativePath)) candidates.push(relativePath);
+    });
+    for (const mediaPath of candidates) {
+      const file = zip.file(mediaPath);
+      if (!file) continue;
+      const existing = new Uint8Array(await file.async('arraybuffer'));
+      if (existing.length !== bytes.length) continue;
+      let same = true;
+      for (let i = 0; i < bytes.length; i++) {
+        if (existing[i] !== bytes[i]) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return mediaPath;
+    }
+    return null;
+  };
+
   for (const { relsPath, blocks } of parts) {
     const images = collectNewImages(blocks);
     if (images.length === 0) continue;
 
-    const relsXml = await readRelsOrStub(zip, relsPath);
+    let relsXml = await readRelsOrStub(zip, relsPath);
     let maxId = findMaxRId(relsXml);
-    const relEntries: string[] = [];
+    let relsChanged = false;
 
     for (const image of images) {
+      // An rId that actually resolves in this part's rels means the image is
+      // already embedded (parsed from the original file) — nothing to do.
+      // A truthy-but-unregistered rId is treated the same as no rId: without
+      // embedding, the serialized r:embed would dangle and the image would be
+      // lost on reopen.
+      if (image.rId && relsXml.includes(`Id="${image.rId}"`)) continue;
+
       const { data, extension } = decodeDataUrl(image.src!);
+
+      // Reuse identical bytes already in the package (with a rel in this part
+      // if one exists, else just add a rel pointing at the existing file).
+      const existingPath = await findExistingMediaMatch(data);
+      if (existingPath) {
+        const target = existingPath.replace(/^word\//, '');
+        const relTag = relsXml.match(
+          new RegExp(`<Relationship\\b[^>]*Target="${target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"[^>]*/?>`)
+        );
+        const existingId = relTag ? /\bId="([^"]+)"/.exec(relTag[0])?.[1] : undefined;
+        if (existingId) {
+          image.rId = existingId;
+          continue;
+        }
+        maxId++;
+        const reusedRId = `rId${maxId}`;
+        relsXml = relsXml.replace(
+          '</Relationships>',
+          `<Relationship Id="${reusedRId}" Type="${RELATIONSHIP_TYPES.image}" Target="${target}"/></Relationships>`
+        );
+        relsChanged = true;
+        image.rId = reusedRId;
+        continue;
+      }
 
       maxImageNum++;
       maxId++;
@@ -313,22 +378,22 @@ async function processNewImages(
         compressionOptions: { level: compressionLevel },
       });
 
-      relEntries.push(
-        `<Relationship Id="${newRId}" Type="${RELATIONSHIP_TYPES.image}" Target="media/${mediaFilename}"/>`
+      relsXml = relsXml.replace(
+        '</Relationships>',
+        `<Relationship Id="${newRId}" Type="${RELATIONSHIP_TYPES.image}" Target="media/${mediaFilename}"/></Relationships>`
       );
+      relsChanged = true;
 
       extensionsAdded.add(extension);
       image.rId = newRId;
     }
 
-    const updatedRelsXml = relsXml.replace(
-      '</Relationships>',
-      relEntries.join('') + '</Relationships>'
-    );
-    zip.file(relsPath, updatedRelsXml, {
-      compression: 'DEFLATE',
-      compressionOptions: { level: compressionLevel },
-    });
+    if (relsChanged) {
+      zip.file(relsPath, relsXml, {
+        compression: 'DEFLATE',
+        compressionOptions: { level: compressionLevel },
+      });
+    }
   }
 
   await registerImageExtensions(zip, extensionsAdded, compressionLevel);

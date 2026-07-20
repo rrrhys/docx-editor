@@ -77,3 +77,100 @@ test('re-saving a document without changes should NOT duplicate images', async (
     expect(finalMedia.length).toBe(originalMedia.length);
   });
 });
+
+// 1x1 red pixel PNG
+const TINY_PNG_DATA_URL =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+function insertImageParagraph(doc: Awaited<ReturnType<typeof parseDocx>>, rId: string): void {
+  doc.package.document.content.push({
+    type: 'paragraph',
+    formatting: {},
+    content: [
+      {
+        type: 'run',
+        formatting: {},
+        content: [
+          {
+            type: 'drawing',
+            image: {
+              type: 'image',
+              rId,
+              src: TINY_PNG_DATA_URL,
+              size: { width: 9525, height: 9525 },
+              wrap: { type: 'inline' },
+            },
+          },
+        ],
+      },
+    ],
+  });
+}
+
+async function parsedImageCount(buffer: ArrayBuffer): Promise<number> {
+  const reparsed = await parseDocx(buffer);
+  let count = 0;
+  for (const block of reparsed.package.document.content) {
+    if (block.type !== 'paragraph') continue;
+    for (const item of block.content) {
+      if (item.type !== 'run') continue;
+      for (const c of item.content) {
+        if (c.type === 'drawing' && c.image?.src) count++;
+      }
+    }
+  }
+  return count;
+}
+
+describe('inserted image persistence across save', () => {
+  test('image with empty rId is embedded and survives reparse', async () => {
+    const doc = await parseDocx(loadFixture('empty.docx'));
+    insertImageParagraph(doc, '');
+
+    const saved = await repackDocx(doc);
+
+    const media = await countMediaFiles(saved);
+    expect(media.length).toBe(1);
+    expect(await countImageRelationships(saved, 'word/_rels/document.xml.rels')).toBe(1);
+    expect(await parsedImageCount(saved)).toBe(1);
+  });
+
+  test('image with fake/unregistered rId is still embedded (regression: image lost on reopen)', async () => {
+    const doc = await parseDocx(loadFixture('empty.docx'));
+    // Mimics the placeholder rIds historically stamped at insert time
+    // (`rId_img_<timestamp>`): truthy, but with no relationship or media
+    // behind it. Before the fix this serialized a dangling r:embed and the
+    // image vanished on reopen.
+    insertImageParagraph(doc, `rId_img_${1234567890}`);
+
+    const saved = await repackDocx(doc);
+
+    const media = await countMediaFiles(saved);
+    expect(media.length).toBe(1);
+    expect(await parsedImageCount(saved)).toBe(1);
+  });
+
+  test('re-saving when the editor re-presents the image as new does not grow the package', async () => {
+    const doc = await parseDocx(loadFixture('empty.docx'));
+    insertImageParagraph(doc, '');
+
+    const firstSave = await repackDocx(doc);
+    expect((await countMediaFiles(firstSave)).length).toBe(1);
+
+    // Simulate the React flow: document content is rebuilt from ProseMirror
+    // on every save, so the rId assigned during the first repack is lost and
+    // the same data: URL comes back marked as new.
+    doc.originalBuffer = firstSave;
+    const para = doc.package.document.content[doc.package.document.content.length - 1];
+    if (para.type === 'paragraph' && para.content[0]?.type === 'run') {
+      const drawing = para.content[0].content[0];
+      if (drawing.type === 'drawing') drawing.image.rId = '';
+    }
+
+    const secondSave = await repackDocx(doc);
+
+    // Byte-dedupe must reuse the existing media file instead of adding a copy
+    expect((await countMediaFiles(secondSave)).length).toBe(1);
+    expect(await parsedImageCount(secondSave)).toBe(1);
+  });
+});
