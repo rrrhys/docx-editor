@@ -272,14 +272,17 @@ function paragraphAttrsToFormatting(attrs: ParagraphAttrs): ParagraphFormatting 
 
   // Fallback: reconstruct formatting from individual attrs (e.g. for
   // newly created paragraphs that don't have _originalFormatting)
+  // Numeric fields use explicit null checks: 0 is a meaningful value
+  // (e.g. w:left="0" overrides a style-inherited or negative indent) and
+  // must not be dropped by falsy filtering.
   const hasFormatting =
     attrs.alignment ||
-    attrs.spaceBefore ||
-    attrs.spaceAfter ||
-    attrs.lineSpacing ||
-    attrs.indentLeft ||
-    attrs.indentRight ||
-    attrs.indentFirstLine ||
+    attrs.spaceBefore != null ||
+    attrs.spaceAfter != null ||
+    attrs.lineSpacing != null ||
+    attrs.indentLeft != null ||
+    attrs.indentRight != null ||
+    attrs.indentFirstLine != null ||
     attrs.numPr ||
     attrs.styleId ||
     attrs.borders ||
@@ -295,13 +298,13 @@ function paragraphAttrsToFormatting(attrs: ParagraphAttrs): ParagraphFormatting 
 
   return {
     alignment: attrs.alignment || undefined,
-    spaceBefore: attrs.spaceBefore || undefined,
-    spaceAfter: attrs.spaceAfter || undefined,
-    lineSpacing: attrs.lineSpacing || undefined,
+    spaceBefore: attrs.spaceBefore ?? undefined,
+    spaceAfter: attrs.spaceAfter ?? undefined,
+    lineSpacing: attrs.lineSpacing ?? undefined,
     lineSpacingRule: attrs.lineSpacingRule || undefined,
-    indentLeft: attrs.indentLeft || undefined,
-    indentRight: attrs.indentRight || undefined,
-    indentFirstLine: attrs.indentFirstLine || undefined,
+    indentLeft: attrs.indentLeft ?? undefined,
+    indentRight: attrs.indentRight ?? undefined,
+    indentFirstLine: attrs.indentFirstLine ?? undefined,
     hangingIndent: attrs.hangingIndent || undefined,
     numPr: attrs.numPr || undefined,
     styleId: attrs.styleId || undefined,

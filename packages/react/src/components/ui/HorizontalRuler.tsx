@@ -15,6 +15,14 @@ import type { CSSProperties } from 'react';
 import type { SectionProperties, TabStop } from '@eigenpal/docx-core/types/document';
 import { twipsToPixels, pixelsToTwips, formatPx } from '@eigenpal/docx-core/utils/units';
 import { useTranslation } from '../../i18n';
+import {
+  TRI_SIZE,
+  MARKER_HIT_PAD,
+  resolveIndentMarkerHit,
+  type RulerMarkerCandidate,
+} from './rulerHitTest';
+
+export { resolveIndentMarkerHit, type RulerMarkerCandidate } from './rulerHitTest';
 
 // ============================================================================
 // TYPES
@@ -59,8 +67,6 @@ const MARGIN_ZONE_COLOR = 'rgba(0, 0, 0, 0.02)';
 const INDENT_COLOR = '#4285f4';
 const INDENT_HOVER_COLOR = '#3367d6';
 const INDENT_ACTIVE_COLOR = '#2a56c6';
-
-const TRI_SIZE = 5; // triangle half-width in px
 
 // ============================================================================
 // HELPERS
@@ -134,6 +140,50 @@ export function HorizontalRuler({
       setDragging(marker);
     },
     [editable]
+  );
+
+  /**
+   * Mousedown on a grey margin zone: if the click lands within grab range of
+   * an indent marker (which happens when a paragraph has a negative indent
+   * and its markers sit inside the margin zone), start an indent drag
+   * instead of a margin drag.
+   */
+  const handleMarginZoneMouseDown = useCallback(
+    (e: React.MouseEvent, marginMarker: 'leftMargin' | 'rightMargin') => {
+      if (!editable) return;
+      const rect = rulerRef.current?.getBoundingClientRect();
+      if (rect) {
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const candidates: RulerMarkerCandidate[] = [];
+        if (showFirstLineIndent && onFirstLineIndentChange) {
+          candidates.push({ type: 'firstLineIndent', positionPx: firstLinePosPx, zone: 'top' });
+        }
+        if (onIndentLeftChange) {
+          candidates.push({ type: 'leftIndent', positionPx: leftIndentPosPx, zone: 'bottom' });
+        }
+        if (onIndentRightChange) {
+          candidates.push({ type: 'rightIndent', positionPx: rightIndentPosPx, zone: 'top' });
+        }
+        const hit = resolveIndentMarkerHit(x, y, RULER_HEIGHT, candidates);
+        if (hit) {
+          handleDragStart(e, hit);
+          return;
+        }
+      }
+      handleDragStart(e, marginMarker);
+    },
+    [
+      editable,
+      showFirstLineIndent,
+      onFirstLineIndentChange,
+      onIndentLeftChange,
+      onIndentRightChange,
+      firstLinePosPx,
+      leftIndentPosPx,
+      rightIndentPosPx,
+      handleDragStart,
+    ]
   );
 
   const handleDrag = useCallback(
@@ -247,7 +297,9 @@ export function HorizontalRuler({
           zIndex: 1,
         }}
         onMouseDown={
-          editable && onLeftMarginChange ? (e) => handleDragStart(e, 'leftMargin') : undefined
+          editable && onLeftMarginChange
+            ? (e) => handleMarginZoneMouseDown(e, 'leftMargin')
+            : undefined
         }
       />
       <div
@@ -263,7 +315,9 @@ export function HorizontalRuler({
           zIndex: 1,
         }}
         onMouseDown={
-          editable && onRightMarginChange ? (e) => handleDragStart(e, 'rightMargin') : undefined
+          editable && onRightMarginChange
+            ? (e) => handleMarginZoneMouseDown(e, 'rightMargin')
+            : undefined
         }
       />
 
@@ -413,10 +467,13 @@ function IndentTriangle({
   const color = isDragging ? INDENT_ACTIVE_COLOR : isHovered ? INDENT_HOVER_COLOR : INDENT_COLOR;
   const triHeight = Math.round(TRI_SIZE * 1.6);
 
+  // Hit box is padded a few px beyond the visible triangle so the small
+  // glyph is reliably grabbable (it sits above the margin zone: zIndex 4 > 1,
+  // which matters when a negative indent places it inside the grey zone).
   const containerStyle: CSSProperties = {
     position: 'absolute',
-    left: formatPx(positionPx - TRI_SIZE),
-    width: TRI_SIZE * 2,
+    left: formatPx(positionPx - TRI_SIZE - MARKER_HIT_PAD),
+    width: (TRI_SIZE + MARKER_HIT_PAD) * 2,
     height: triHeight + 2,
     cursor: editable ? 'ew-resize' : 'default',
     zIndex: isDragging ? 10 : 4,
@@ -428,7 +485,7 @@ function IndentTriangle({
       ? {
           position: 'absolute',
           top: 1,
-          left: 0,
+          left: MARKER_HIT_PAD,
           width: 0,
           height: 0,
           borderLeft: `${TRI_SIZE}px solid transparent`,
@@ -439,7 +496,7 @@ function IndentTriangle({
       : {
           position: 'absolute',
           bottom: 1,
-          left: 0,
+          left: MARKER_HIT_PAD,
           width: 0,
           height: 0,
           borderLeft: `${TRI_SIZE}px solid transparent`,

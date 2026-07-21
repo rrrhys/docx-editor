@@ -258,19 +258,21 @@ function serializeSpacing(formatting: ParagraphFormatting): string {
 function serializeIndentation(formatting: ParagraphFormatting): string {
   const attrs: string[] = [];
 
-  if (formatting.indentLeft !== undefined) {
+  // Note: 0 is serialized explicitly (e.g. w:left="0") — it overrides
+  // negative or style-inherited indents and must not be dropped.
+  if (formatting.indentLeft != null) {
     attrs.push(`w:left="${formatting.indentLeft}"`);
   }
 
-  if (formatting.indentRight !== undefined) {
+  if (formatting.indentRight != null) {
     attrs.push(`w:right="${formatting.indentRight}"`);
   }
 
-  if (formatting.indentFirstLine !== undefined) {
+  if (formatting.indentFirstLine != null) {
     if (formatting.hangingIndent) {
       // Hanging indent is stored as positive value but uses w:hanging attribute
       attrs.push(`w:hanging="${Math.abs(formatting.indentFirstLine)}"`);
-    } else if (formatting.indentFirstLine !== 0) {
+    } else {
       attrs.push(`w:firstLine="${formatting.indentFirstLine}"`);
     }
   }

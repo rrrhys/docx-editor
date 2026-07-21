@@ -423,6 +423,71 @@ function setParagraphAttrsCmd(attrs: Record<string, unknown>): Command {
   };
 }
 
+/**
+ * Build new paragraph attrs for an indent change, writing the change through
+ * to `_originalFormatting` as well.
+ *
+ * Serialization (fromProseDoc) uses `_originalFormatting` as the lossless
+ * base for DOCX-imported paragraphs and only re-reads a small set of attrs
+ * from PM state. Without this write-through, indent edits on imported
+ * paragraphs would be silently discarded on save (the original w:ind values
+ * would round-trip back). A patch value of `null` removes the key from
+ * `_originalFormatting` (i.e. "no direct value"), any number — including 0
+ * and negatives — is stored explicitly so it serializes (e.g. w:left="0").
+ */
+function applyIndentPatch(
+  nodeAttrs: Record<string, unknown>,
+  patch: Record<string, number | boolean | null>
+): Record<string, unknown> {
+  const orig = nodeAttrs._originalFormatting as Record<string, unknown> | null;
+  let newOrig = orig;
+  if (orig) {
+    newOrig = { ...orig };
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === null) {
+        delete newOrig[key];
+      } else {
+        newOrig[key] = value;
+      }
+    }
+  }
+  return {
+    ...nodeAttrs,
+    ...patch,
+    _originalFormatting: newOrig,
+  };
+}
+
+/**
+ * Set indent-related paragraph attrs on all selected paragraphs, keeping
+ * `_originalFormatting` in sync (see applyIndentPatch).
+ */
+function setParagraphIndentCmd(patch: Record<string, number | boolean | null>): Command {
+  return (state, dispatch) => {
+    const { $from, $to } = state.selection;
+
+    if (!dispatch) return true;
+
+    let tr = state.tr;
+    const seen = new Set<number>();
+
+    state.doc.nodesBetween($from.pos, $to.pos, (node, pos) => {
+      if (node.type.name === 'paragraph' && !seen.has(pos)) {
+        seen.add(pos);
+        tr = tr.setNodeMarkup(pos, undefined, applyIndentPatch(node.attrs, patch));
+      }
+    });
+
+    dispatch(tr.scrollIntoView());
+    return true;
+  };
+}
+
+/** Normalize a twips value from UI: keep any finite number (0 and negatives included). */
+function normalizeTwips(twips: number): number | null {
+  return Number.isFinite(twips) ? Math.round(twips) : null;
+}
+
 // ============================================================================
 // RESOLVED STYLE ATTRS (for applyStyle)
 // ============================================================================
@@ -463,11 +528,12 @@ function makeIncreaseIndent(amount: number = 720): Command {
     state.doc.nodesBetween($from.pos, $to.pos, (node, pos) => {
       if (node.type.name === 'paragraph' && !seen.has(pos)) {
         seen.add(pos);
-        const currentIndent = node.attrs.indentLeft || 0;
-        tr = tr.setNodeMarkup(pos, undefined, {
-          ...node.attrs,
-          indentLeft: currentIndent + amount,
-        });
+        const currentIndent = (node.attrs.indentLeft as number | null) ?? 0;
+        tr = tr.setNodeMarkup(
+          pos,
+          undefined,
+          applyIndentPatch(node.attrs, { indentLeft: currentIndent + amount })
+        );
       }
     });
 
@@ -488,12 +554,18 @@ function makeDecreaseIndent(amount: number = 720): Command {
     state.doc.nodesBetween($from.pos, $to.pos, (node, pos) => {
       if (node.type.name === 'paragraph' && !seen.has(pos)) {
         seen.add(pos);
-        const currentIndent = node.attrs.indentLeft || 0;
+        const currentIndent = (node.attrs.indentLeft as number | null) ?? 0;
         const newIndent = Math.max(0, currentIndent - amount);
-        tr = tr.setNodeMarkup(pos, undefined, {
-          ...node.attrs,
-          indentLeft: newIndent > 0 ? newIndent : null,
-        });
+        // Keep explicit 0 when the paragraph previously had an indent so the
+        // removal persists for DOCX-imported paragraphs; use null only when
+        // there was no indent to begin with (no-op case).
+        tr = tr.setNodeMarkup(
+          pos,
+          undefined,
+          applyIndentPatch(node.attrs, {
+            indentLeft: currentIndent === 0 && newIndent === 0 ? null : newIndent,
+          })
+        );
       }
     });
 
@@ -694,12 +766,16 @@ export const ParagraphExtension = createNodeExtension({
         setSpaceAfter: (twips: number) => setParagraphAttr('spaceAfter', twips),
         increaseIndent: (amount?: number) => makeIncreaseIndent(amount),
         decreaseIndent: (amount?: number) => makeDecreaseIndent(amount),
-        setIndentLeft: (twips: number) => setParagraphAttr('indentLeft', twips > 0 ? twips : null),
+        // NOTE: 0 is a legitimate value here (e.g. dragging the ruler marker
+        // back to the margin to cancel a negative indent from the source
+        // document). It must be stored explicitly, not treated as "clear".
+        setIndentLeft: (twips: number) =>
+          setParagraphIndentCmd({ indentLeft: normalizeTwips(twips) }),
         setIndentRight: (twips: number) =>
-          setParagraphAttr('indentRight', twips > 0 ? twips : null),
+          setParagraphIndentCmd({ indentRight: normalizeTwips(twips) }),
         setIndentFirstLine: (twips: number, hanging?: boolean) =>
-          setParagraphAttrsCmd({
-            indentFirstLine: twips > 0 ? twips : null,
+          setParagraphIndentCmd({
+            indentFirstLine: normalizeTwips(twips),
             hangingIndent: hanging ?? false,
           }),
         applyStyle: (styleId: string, resolvedAttrs?: ResolvedStyleAttrs) =>
