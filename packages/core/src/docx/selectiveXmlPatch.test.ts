@@ -9,6 +9,7 @@ import {
   validatePatchSafety,
   buildPatchedDocumentXml,
   countParagraphElements,
+  extractBodySectPrXml,
 } from './selectiveXmlPatch';
 
 // ============================================================================
@@ -298,5 +299,75 @@ describe('buildPatchedDocumentXml', () => {
     const origAfterBBB = SIMPLE_DOC.substring(SIMPLE_DOC.indexOf('<w:p w14:paraId="CCC333"'));
     const resultAfterBBB = result!.substring(result!.indexOf('<w:p w14:paraId="CCC333"'));
     expect(resultAfterBBB).toBe(origAfterBBB);
+  });
+});
+
+// ============================================================================
+// extractBodySectPrXml
+// ============================================================================
+
+describe('extractBodySectPrXml', () => {
+  const NS =
+    'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"';
+
+  test('extracts body-level sectPr as last child of w:body', () => {
+    const xml = `<?xml version="1.0"?>
+<w:document ${NS}>
+<w:body>
+<w:p w14:paraId="AAA111"><w:r><w:t>Text</w:t></w:r></w:p>
+<w:sectPr w:rsidR="00AB12CD"><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>
+</w:body>
+</w:document>`;
+
+    const result = extractBodySectPrXml(xml);
+    expect(result).not.toBeNull();
+    expect(result!).toStartWith('<w:sectPr');
+    expect(result!).toEndWith('</w:sectPr>');
+    expect(result!).toContain('w:left="1440"');
+  });
+
+  test('returns null when document has no sectPr at all', () => {
+    const xml = `<w:document ${NS}><w:body><w:p w14:paraId="AAA111"><w:r><w:t>Hi</w:t></w:r></w:p></w:body></w:document>`;
+    expect(extractBodySectPrXml(xml)).toBeNull();
+  });
+
+  test('ignores mid-document sectPr inside w:pPr when no body-level sectPr exists', () => {
+    const xml = `<w:document ${NS}><w:body>
+<w:p w14:paraId="AAA111"><w:pPr><w:sectPr><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720"/></w:sectPr></w:pPr><w:r><w:t>Section end</w:t></w:r></w:p>
+<w:p w14:paraId="BBB222"><w:r><w:t>After</w:t></w:r></w:p>
+</w:body></w:document>`;
+    expect(extractBodySectPrXml(xml)).toBeNull();
+  });
+
+  test('extracts body-level sectPr when mid-document sectPr also present', () => {
+    const xml = `<w:document ${NS}><w:body>
+<w:p w14:paraId="AAA111"><w:pPr><w:sectPr><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720"/></w:sectPr></w:pPr><w:r><w:t>Section end</w:t></w:r></w:p>
+<w:p w14:paraId="BBB222"><w:r><w:t>After</w:t></w:r></w:p>
+<w:sectPr><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
+</w:body></w:document>`;
+    const result = extractBodySectPrXml(xml);
+    expect(result).not.toBeNull();
+    expect(result!).toContain('w:left="1440"');
+    expect(result!).not.toContain('w:left="720"');
+  });
+
+  test('handles self-closing body-level sectPr', () => {
+    const xml = `<w:document ${NS}><w:body><w:p w14:paraId="AAA111"/><w:sectPr/></w:body></w:document>`;
+    expect(extractBodySectPrXml(xml)).toBe('<w:sectPr/>');
+  });
+
+  test('does not confuse w:sectPrChange with body-level sectPr', () => {
+    // The nested sectPr inside sectPrChange is not the last child of body,
+    // so extraction must not return a truncated/wrong fragment.
+    const xml = `<w:document ${NS}><w:body>
+<w:p w14:paraId="AAA111"><w:pPr><w:sectPr><w:pgMar w:top="720"/><w:sectPrChange w:id="1"><w:sectPr><w:pgMar w:top="99"/></w:sectPr></w:sectPrChange></w:sectPr></w:pPr></w:p>
+<w:p w14:paraId="BBB222"><w:r><w:t>After</w:t></w:r></w:p>
+</w:body></w:document>`;
+    // No body-level sectPr — must return null, never the nested revision copy
+    expect(extractBodySectPrXml(xml)).toBeNull();
+  });
+
+  test('returns null when there is no w:body close tag', () => {
+    expect(extractBodySectPrXml('<w:sectPr/>')).toBeNull();
   });
 });

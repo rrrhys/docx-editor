@@ -8,7 +8,7 @@
  * Returns null on any failure, signaling the caller to fall back to full repack.
  */
 
-import type { Document, BlockContent } from '../types/document';
+import type { Document, BlockContent, SectionProperties } from '../types/document';
 import { serializeDocument } from './serializer/documentSerializer';
 import {
   serializeCommentsWithInfo,
@@ -16,7 +16,9 @@ import {
   serializeCommentsIds,
   serializeCommentsExtensible,
 } from './serializer/commentSerializer';
-import { buildPatchedDocumentXml } from './selectiveXmlPatch';
+import { buildPatchedDocumentXml, extractBodySectPrXml } from './selectiveXmlPatch';
+import { parseXmlDocument } from './xmlParser';
+import { parseSectionProperties } from './sectionParser';
 import {
   applyUpdatesToZip,
   findMaxRId,
@@ -57,6 +59,70 @@ function hasNewImagesOrHyperlinks(blocks: BlockContent[]): boolean {
     }
   }
   return false;
+}
+
+/**
+ * Structural deep-equality for parsed section-property values.
+ * Keys whose value is `undefined` are treated as absent, and object key
+ * order is ignored, so two objects produced at different times compare
+ * equal as long as they hold the same values.
+ */
+function deepEqualProps(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((v, i) => deepEqualProps(v, b[i]));
+  }
+  if (a && b && typeof a === 'object' && typeof b === 'object') {
+    const ao = a as Record<string, unknown>;
+    const bo = b as Record<string, unknown>;
+    const aKeys = Object.keys(ao).filter((k) => ao[k] !== undefined);
+    const bKeys = Object.keys(bo).filter((k) => bo[k] !== undefined);
+    if (aKeys.length !== bKeys.length) return false;
+    return aKeys.every((k) => deepEqualProps(ao[k], bo[k]));
+  }
+  return false;
+}
+
+/**
+ * Detect whether the document's final (body-level) section properties have
+ * changed relative to the original document.xml.
+ *
+ * Paragraph patching never touches the body-level <w:sectPr>, so any change
+ * there (page margins, size, orientation, header/footer references, ...)
+ * would be silently dropped by a selective save. When this returns true the
+ * caller must fall back to a full repack.
+ *
+ * Detection deliberately avoids comparing XML text against serializer
+ * output (formatting/attribute-order noise would flag every Word document
+ * as changed). Instead, the original body-level sectPr fragment is parsed
+ * through the same parseSectionProperties() that produced the document's
+ * finalSectionProperties at load time, and the two objects are
+ * deep-compared — same parser on both sides means zero formatting noise.
+ */
+export function finalSectionPropertiesChanged(
+  originalDocXml: string,
+  currentProps: SectionProperties | undefined
+): boolean {
+  const originalSectPrXml = extractBodySectPrXml(originalDocXml);
+
+  let originalProps: SectionProperties;
+  if (originalSectPrXml === null) {
+    // No body-level sectPr in the original — equivalent to empty properties.
+    originalProps = {};
+  } else {
+    const el = parseXmlDocument(originalSectPrXml);
+    if (!el) {
+      // Cannot parse what we extracted — treat as changed (safe fallback).
+      return true;
+    }
+    originalProps = parseSectionProperties(el);
+  }
+
+  // Absent properties are equivalent to an empty object: a document whose
+  // original has no sectPr and whose model has no (or only empty)
+  // finalSectionProperties is unchanged; anything else must deep-match.
+  return !deepEqualProps(originalProps, currentProps ?? {});
 }
 
 export interface SelectiveSaveOptions {
@@ -104,12 +170,24 @@ export async function attemptSelectiveSave(
     const zip = await JSZip.loadAsync(originalBuffer);
     const updates = new Map<string, string>();
 
+    const docXmlFile = zip.file('word/document.xml');
+    if (!docXmlFile) return null;
+    const originalDocXml = await docXmlFile.async('text');
+
+    // Body-level <w:sectPr> (page margins, size, orientation, header/footer
+    // references) is never touched by paragraph patching. If the final
+    // section properties changed relative to the original document.xml, a
+    // selective save would silently drop them — fall back to full repack.
+    // Note: this must run even when changedParaIds is empty (e.g. a
+    // margin-only edit produces no changed paragraphs).
+    if (
+      finalSectionPropertiesChanged(originalDocXml, doc.package.document.finalSectionProperties)
+    ) {
+      return null;
+    }
+
     // Patch document.xml if paragraphs changed
     if (changedParaIds.size > 0) {
-      const docXmlFile = zip.file('word/document.xml');
-      if (!docXmlFile) return null;
-      const originalDocXml = await docXmlFile.async('text');
-
       const serializedDocXml = serializeDocument(doc);
       const patchedDocXml = buildPatchedDocumentXml(
         originalDocXml,

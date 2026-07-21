@@ -244,6 +244,58 @@ export function buildPatchedDocumentXml(
   return result;
 }
 
+/**
+ * Extract the body-level <w:sectPr> element (the final section properties)
+ * from a document.xml string.
+ *
+ * The body-level sectPr is the one that is a direct child of <w:body> —
+ * per the OOXML schema it must be the LAST child of the body, after the
+ * last paragraph. <w:sectPr> can also appear inside <w:pPr> for
+ * mid-document sections; those are explicitly NOT matched here.
+ *
+ * Returns the exact XML substring of the body-level sectPr, or null if
+ * the document has no body-level sectPr (or it cannot be located safely).
+ */
+export function extractBodySectPrXml(xml: string): string | null {
+  const bodyClose = xml.lastIndexOf('</w:body>');
+  if (bodyClose === -1) return null;
+
+  // Find the LAST <w:sectPr occurrence before </w:body>. If a body-level
+  // sectPr exists it is the last child of <w:body>, so it is the last
+  // sectPr in document order. (Lookahead excludes e.g. <w:sectPrChange.)
+  const pattern = /<w:sectPr(?=[\s/>])/g;
+  let candidate = -1;
+  let m: RegExpExecArray | null;
+  while ((m = pattern.exec(xml)) !== null) {
+    if (m.index >= bodyClose) break;
+    candidate = m.index;
+  }
+  if (candidate === -1) return null;
+
+  // Find the end of the element: self-closing <w:sectPr/> or </w:sectPr>
+  const openTagEnd = xml.indexOf('>', candidate);
+  if (openTagEnd === -1 || openTagEnd >= bodyClose) return null;
+
+  let end: number;
+  if (xml[openTagEnd - 1] === '/') {
+    // Self-closing <w:sectPr ... />
+    end = openTagEnd + 1;
+  } else {
+    const closeIdx = xml.indexOf('</w:sectPr>', openTagEnd);
+    if (closeIdx === -1) return null;
+    end = closeIdx + '</w:sectPr>'.length;
+  }
+  if (end > bodyClose) return null;
+
+  // A body-level sectPr must be the last child of <w:body>: only whitespace
+  // may sit between it and </w:body>. If anything else follows, the
+  // candidate was a mid-document sectPr (inside <w:pPr>) — report "none"
+  // so the caller treats the body-level sectPr as absent.
+  if (xml.substring(end, bodyClose).trim() !== '') return null;
+
+  return xml.substring(candidate, end);
+}
+
 function escapeRegExp(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

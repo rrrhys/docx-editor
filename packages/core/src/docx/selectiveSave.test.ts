@@ -11,13 +11,15 @@ import * as path from 'path';
 import JSZip from 'jszip';
 import { parseDocx } from './parser';
 import { repackDocx } from './rezip';
-import { attemptSelectiveSave } from './selectiveSave';
+import { attemptSelectiveSave, finalSectionPropertiesChanged } from './selectiveSave';
 import {
   findParagraphOffsets,
   buildPatchedDocumentXml,
   validatePatchSafety,
   countParagraphElements,
+  extractBodySectPrXml,
 } from './selectiveXmlPatch';
+import { DocumentAgent } from '../agent/DocumentAgent';
 import { serializeDocument } from './serializer/documentSerializer';
 import type { Paragraph, Run } from '../types/document';
 
@@ -924,5 +926,281 @@ describe('Selective save edge cases', () => {
         }
       }
     }
+  });
+});
+
+// ============================================================================
+// Final section properties (body-level sectPr) change detection
+// ============================================================================
+
+describe('Selective save with section property (margin) changes', () => {
+  test('margin-only change falls back to full repack (returns null)', async () => {
+    const buffer = await loadFixture('example-with-image.docx');
+    const doc = await parseDocx(buffer, { preloadFonts: false });
+
+    // Fixture must have body-level section properties for this test
+    expect(doc.package.document.finalSectionProperties).toBeDefined();
+
+    // Simulate a margin drag (as createMarginHandler does in the editor)
+    const props = doc.package.document.finalSectionProperties!;
+    const newLeft = (props.marginLeft ?? 1440) + 720;
+    doc.package.document.finalSectionProperties = {
+      ...props,
+      marginLeft: newLeft,
+    };
+
+    // Margin-only edits produce NO changed paragraphs — this is exactly the
+    // case where selective save used to silently drop the change.
+    const result = await attemptSelectiveSave(doc, buffer, {
+      changedParaIds: new Set(),
+      structuralChange: false,
+      hasUntrackedChanges: false,
+      hasNonParagraphChanges: false,
+    });
+
+    expect(result).toBeNull();
+  });
+
+  test('DocumentAgent.toBuffer persists margin change via full-repack fallback', async () => {
+    const buffer = await loadFixture('example-with-image.docx');
+    const doc = await parseDocx(buffer, { preloadFonts: false });
+    expect(doc.package.document.finalSectionProperties).toBeDefined();
+
+    const props = doc.package.document.finalSectionProperties!;
+    const newLeft = (props.marginLeft ?? 1440) + 720;
+    doc.package.document.finalSectionProperties = {
+      ...props,
+      marginLeft: newLeft,
+    };
+
+    const agent = new DocumentAgent(doc);
+    const out = await agent.toBuffer({
+      selective: {
+        changedParaIds: new Set(),
+        structuralChange: false,
+        hasUntrackedChanges: false,
+        hasNonParagraphChanges: false,
+      },
+    });
+
+    // The saved document.xml must contain the new margin value
+    const outXml = await getDocumentXml(out);
+    expect(outXml).toContain(`w:left="${newLeft}"`);
+
+    // And it must survive a reload round-trip
+    const reopened = await parseDocx(out, { preloadFonts: false });
+    expect(reopened.package.document.finalSectionProperties?.marginLeft).toBe(newLeft);
+  });
+
+  test('unchanged margins on Word original do NOT trigger fallback', async () => {
+    // Guard against false positives: an untouched Word document (whose
+    // sectPr formatting never matches our serializer output textually)
+    // must still selective-save.
+    const buffer = await loadFixture('example-with-image.docx');
+    const doc = await parseDocx(buffer, { preloadFonts: false });
+    expect(doc.package.document.finalSectionProperties).toBeDefined();
+
+    const result = await attemptSelectiveSave(doc, buffer, {
+      changedParaIds: new Set(),
+      structuralChange: false,
+      hasUntrackedChanges: false,
+      hasNonParagraphChanges: false,
+    });
+
+    expect(result).not.toBeNull();
+    // document.xml must be byte-for-byte unchanged
+    const originalXml = await getDocumentXml(buffer);
+    const resultXml = await getDocumentXml(result!);
+    expect(resultXml).toBe(originalXml);
+  });
+
+  test('unchanged margins with a paragraph edit still selective-save', async () => {
+    const buffer = await loadFixture('EP_ZMVZ_MULTI_v4.docx');
+    const doc = await parseDocx(buffer, { preloadFonts: false });
+
+    const paragraphs = doc.package.document.content.filter(
+      (b): b is Paragraph =>
+        b.type === 'paragraph' &&
+        !!b.paraId &&
+        b.content.some(
+          (i) => i.type === 'run' && i.content.some((c) => c.type === 'text' && c.text.length > 0)
+        )
+    );
+    const target = paragraphs[0];
+    if (!target?.paraId) {
+      console.log('No suitable paragraph, skipping');
+      return;
+    }
+
+    for (const item of target.content) {
+      if (item.type === 'run') {
+        for (const c of item.content) {
+          if (c.type === 'text' && c.text.length > 0) {
+            c.text = c.text + ' [SECTPR_GUARD]';
+            break;
+          }
+        }
+        break;
+      }
+    }
+
+    const result = await attemptSelectiveSave(doc, buffer, {
+      changedParaIds: new Set([target.paraId]),
+      structuralChange: false,
+      hasUntrackedChanges: false,
+      hasNonParagraphChanges: false,
+    });
+
+    // Selective save may legitimately fall back for serializer-mismatch
+    // reasons, but if it succeeds the paragraph edit must be present.
+    if (result) {
+      const resultXml = await getDocumentXml(result);
+      expect(resultXml).toContain('[SECTPR_GUARD]');
+    }
+  });
+
+  test('original without body-level sectPr + document with section properties → fallback', async () => {
+    const buffer = await loadFixture('example-with-image.docx');
+
+    // Build a variant of the fixture whose document.xml has NO body sectPr
+    const zip = await JSZip.loadAsync(buffer);
+    const originalXml = await zip.file('word/document.xml')!.async('text');
+    const sectPrXml = extractBodySectPrXml(originalXml);
+    expect(sectPrXml).not.toBeNull();
+    const strippedXml = originalXml.replace(sectPrXml!, '');
+    zip.file('word/document.xml', strippedXml);
+    const strippedBuffer = await zip.generateAsync({ type: 'arraybuffer' });
+
+    const doc = await parseDocx(strippedBuffer, { preloadFonts: false });
+    expect(doc.package.document.finalSectionProperties).toBeUndefined();
+
+    // Unchanged (no sectPr, no finalSectionProperties) → selective save OK
+    const unchanged = await attemptSelectiveSave(doc, strippedBuffer, {
+      changedParaIds: new Set(),
+      structuralChange: false,
+      hasUntrackedChanges: false,
+      hasNonParagraphChanges: false,
+    });
+    expect(unchanged).not.toBeNull();
+
+    // Now the editor adds margins (spread over undefined, as the margin
+    // handler does) → must be treated as changed → fallback
+    doc.package.document.finalSectionProperties = {
+      ...doc.package.document.finalSectionProperties,
+      marginLeft: 2160,
+      marginRight: 2160,
+    };
+    const changed = await attemptSelectiveSave(doc, strippedBuffer, {
+      changedParaIds: new Set(),
+      structuralChange: false,
+      hasUntrackedChanges: false,
+      hasNonParagraphChanges: false,
+    });
+    expect(changed).toBeNull();
+  });
+
+  test('document with sectPr but finalSectionProperties removed → fallback', async () => {
+    const buffer = await loadFixture('example-with-image.docx');
+    const doc = await parseDocx(buffer, { preloadFonts: false });
+    expect(doc.package.document.finalSectionProperties).toBeDefined();
+
+    doc.package.document.finalSectionProperties = undefined;
+
+    const result = await attemptSelectiveSave(doc, buffer, {
+      changedParaIds: new Set(),
+      structuralChange: false,
+      hasUntrackedChanges: false,
+      hasNonParagraphChanges: false,
+    });
+    expect(result).toBeNull();
+  });
+});
+
+describe('finalSectionPropertiesChanged', () => {
+  const NS =
+    'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"';
+
+  test('Word-style formatting noise does not register as a change', () => {
+    // Word-authored sectPr: rsid attributes, multi-line formatting,
+    // attribute order that will never match our serializer output.
+    const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document ${NS}><w:body><w:p w14:paraId="AAA111"><w:r><w:t>Hi</w:t></w:r></w:p>
+  <w:sectPr w:rsidR="00AB12CD" w:rsidSect="00FF00FF">
+    <w:pgSz w:h="16838" w:w="11906"/>
+    <w:pgMar w:gutter="0" w:footer="708" w:header="708" w:left="1440" w:bottom="1440" w:right="1440" w:top="1440"/>
+    <w:cols w:space="708"/>
+  </w:sectPr>
+</w:body></w:document>`;
+
+    // What the editor holds: same values, different key insertion order
+    const currentProps = {
+      marginTop: 1440,
+      marginBottom: 1440,
+      marginLeft: 1440,
+      marginRight: 1440,
+      headerDistance: 708,
+      footerDistance: 708,
+      gutter: 0,
+      pageHeight: 16838,
+      pageWidth: 11906,
+      columnSpace: 708,
+    };
+
+    expect(finalSectionPropertiesChanged(xml, currentProps)).toBe(false);
+  });
+
+  test('a single changed margin value registers as a change', () => {
+    const xml = `<w:document ${NS}><w:body><w:p w14:paraId="AAA111"/><w:sectPr><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>`;
+
+    const unchanged = {
+      marginTop: 1440,
+      marginRight: 1440,
+      marginBottom: 1440,
+      marginLeft: 1440,
+    };
+    expect(finalSectionPropertiesChanged(xml, unchanged)).toBe(false);
+    expect(finalSectionPropertiesChanged(xml, { ...unchanged, marginLeft: 2880 })).toBe(true);
+  });
+
+  test('no body sectPr and no finalSectionProperties → unchanged', () => {
+    const xml = `<w:document ${NS}><w:body><w:p w14:paraId="AAA111"/></w:body></w:document>`;
+    expect(finalSectionPropertiesChanged(xml, undefined)).toBe(false);
+    // Empty object is equivalent to absent
+    expect(finalSectionPropertiesChanged(xml, {})).toBe(false);
+  });
+
+  test('no body sectPr but document has margins → changed', () => {
+    const xml = `<w:document ${NS}><w:body><w:p w14:paraId="AAA111"/></w:body></w:document>`;
+    expect(finalSectionPropertiesChanged(xml, { marginLeft: 1440 })).toBe(true);
+  });
+
+  test('body sectPr present but finalSectionProperties removed → changed', () => {
+    const xml = `<w:document ${NS}><w:body><w:p w14:paraId="AAA111"/><w:sectPr><w:pgMar w:top="1440"/></w:sectPr></w:body></w:document>`;
+    expect(finalSectionPropertiesChanged(xml, undefined)).toBe(true);
+  });
+
+  test('mid-document sectPr is ignored for final-section comparison', () => {
+    const xml = `<w:document ${NS}><w:body>
+<w:p w14:paraId="AAA111"><w:pPr><w:sectPr><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720"/></w:sectPr></w:pPr></w:p>
+<w:p w14:paraId="BBB222"/>
+<w:sectPr><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
+</w:body></w:document>`;
+    const currentProps = {
+      marginTop: 1440,
+      marginRight: 1440,
+      marginBottom: 1440,
+      marginLeft: 1440,
+    };
+    expect(finalSectionPropertiesChanged(xml, currentProps)).toBe(false);
+  });
+
+  test('header reference changes register as changed', () => {
+    const xml = `<w:document ${NS} xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body><w:p w14:paraId="AAA111"/><w:sectPr><w:pgMar w:top="1440"/></w:sectPr></w:body></w:document>`;
+    expect(
+      finalSectionPropertiesChanged(xml, {
+        marginTop: 1440,
+        headerReferences: [{ type: 'default', rId: 'rId99' }],
+      })
+    ).toBe(true);
   });
 });
